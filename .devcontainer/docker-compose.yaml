@@ -1,0 +1,30 @@
+version: '3.7'
+services:
+  devcontainer:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    command: /bin/sh -c "while sleep 1000; do :; done"
+    environment:
+      - NEO4J_DATABASE=neo4j
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=neo4jpass
+      - NEO4J_ADDRESS=neo4j://neo4j:7687
+    volumes: 
+      - ..:/workspace:cached
+  neo4j:
+    image: docker.io/neo4j:5.15.0-enterprise-ubi8
+    
+    environment:
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+      - NEO4JLABS_PLUGINS=["apoc"]
+      - NEO4J_AUTH=neo4j/neo4jpass
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=eval
+    ports:
+      - 7474:7474
+      - 7687:7687
+    volumes:
+      - ./neo4j-data:/data
+

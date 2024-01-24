@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "ragnroll"
+version = "0.1.0"
+description = ""
+authors = ["Izhar Firdaus <kagesenshi.87@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+neo4j = "^5.15.0"
+uvicorn = "^0.26.0"
+pydantic-settings = "^2.1.0"
+langchain = "^0.1.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+ragnroll = 'ragnroll.main:run'

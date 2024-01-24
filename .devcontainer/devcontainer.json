@@ -1,0 +1,21 @@
+{
+	"name": "Python",
+	"dockerComposeFile": ["docker-compose.yaml"],
+	"service": "devcontainer",	
+	"workspaceFolder": "/workspace",
+	"shutdownAction": "stopCompose",
+	"customizations": {
+		"vscode": {			
+			"extensions": [
+				"dbaeumer.vscode-eslint",
+				"adamcowley.neo4j-vscode",
+				"Arjun.swagger-viewer",
+				"eridem.vscode-postman",
+				"humao.rest-client",
+				"ms-python.python",
+				"jebbs.plantuml"
+			]
+		}
+	},
+	"remoteUser": "root"
+}
