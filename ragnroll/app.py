@@ -64,28 +64,29 @@ async def delete_retrieval_strategy(request: fastapi.Request, entry_id: int) -> 
     view = await retrieval_strategy_view(request)
     return await view.delete(entry_id)
 
-# Document Management
-@app.post("/document")
-async def create_document_meta(payload: model.Document) -> model.Message:
-    return {}
-
-@app.get("/document/{entry_id}")
-async def get_document_meta(entry_id: int) -> model.Document:
-    return {}
-
-@app.put("/document/{entry_id}")
-async def update_document_meta(entry_id: int, payload: model.Document) -> model.Message:
-    return {}
-
-@app.delete("/document/{entry_id}")
-async def delete_document_meta(entry_id: int) -> model.Message:
-    return {}
-
-@app.put("/document/{entry_id}/file/{property}")
-async def upload_document(entry_id: int, property: str):
-    return {}
-
-@app.get("/document/{entry_id}/file/{property}")
-async def download_document(entry_id: int, property: str):
-    return {}
-
+## Document Management
+#@app.post("/document")
+#async def create_document_meta(payload: model.Document) -> model.Message:
+#    return {}
+#
+#@app.get("/document/{entry_id}")
+#async def get_document_meta(entry_id: int) -> model.Document:
+#    return {}
+#
+#@app.put("/document/{entry_id}")
+#async def update_document_meta(entry_id: int, payload: model.Document) -> model.Message:
+#    return {}
+#
+#@app.delete("/document/{entry_id}")
+#async def delete_document_meta(entry_id: int) -> model.Message:
+#    return {}
+#
+#@app.put("/document/{entry_id}/file/{property}")
+#async def upload_document(entry_id: int, property: str):
+#    return {}
+#
+#@app.get("/document/{entry_id}/file/{property}")
+#async def download_document(entry_id: int, property: str):
+#    return {}
+#
+#
