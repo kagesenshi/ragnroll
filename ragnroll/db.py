@@ -5,6 +5,7 @@ import ssl
 import json
 import abc
 import pydantic
+import typing
 from . import model
 
 def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
@@ -29,19 +30,18 @@ def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
 
     return neo4j.AsyncGraphDatabase.driver(**params)
 
-async def session(request: fastapi.Request) -> neo4j.AsyncDriver:
+async def session(request: fastapi.Request) -> neo4j.AsyncSession:
     driver: neo4j.AsyncDriver = connect(request)
     return driver.session()
 
-class BaseCollection(abc.ABC):
+S = typing.TypeVar("S")
 
-    label: str
-    schema: type[pydantic.BaseModel]
-    create_query: str
-    update_query: str
+class Collection(abc.ABC, typing.Generic[S]):
 
-    def __init__(self, session: neo4j.AsyncSession):
+    def __init__(self, session: neo4j.AsyncSession, label: str, schema: type[pydantic.BaseModel]):
+        self.label = label
         self.session = session
+        self.schema = schema
 
     @property
     def create_query(self) -> str:
@@ -80,25 +80,25 @@ class BaseCollection(abc.ABC):
         params['__node_id'] = node_id
         res = await txn.run(self.update_query, parameters=params)
         record = await res.single()
-        return model.Node(id=record['identifier'], properties=record['n'], labels=record['node_labels'])
+        return model.Node[self.schema](id=record['identifier'], properties=record['n'], labels=record['node_labels'])
     
     async def list_all(self, limit=100, offset=0) -> list[model.Node]:
         return await self.session.execute_read(self._list_all, limit=limit, offset=offset)
     
-    async def _list_all(self, txn: neo4j.AsyncTransaction, limit=100, offset=0) -> list[model.Node]:
+    async def _list_all(self, txn: neo4j.AsyncTransaction, limit=100, offset=0) -> list[model.Node[S]]:
         query = '''
         MATCH (n:%s)
         RETURN n, id(n) as identifier, labels(n) as node_labels
             SKIP $offset
             LIMIT $limit
         ''' % self.label
-        res = await txn.run(query, parameters={'limit': limit, 'offset': offset, '__label': self.label})
-        return [model.Node(id=r['identifier'], properties=r['n'], labels=r['node_labels']) for r in await res.data()]
+        res = await txn.run(query, parameters={'limit': limit, 'offset': offset})
+        return [model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels']) for r in await res.data()]
     
     async def get(self, node_id) -> model.Node:
         return await self.session.execute_read(self._get_by_id, node_id)
     
-    async def _get_by_id(self, txn: neo4j.AsyncTransaction, node_id) -> model.Node:
+    async def _get_by_id(self, txn: neo4j.AsyncTransaction, node_id) -> model.Node[S]:
         query = '''
         MATCH (n:%s)
             WHERE id(n) = $__node_id 
@@ -107,7 +107,7 @@ class BaseCollection(abc.ABC):
         res = await txn.run(query, parameters={'__node_id': node_id})
         r = await res.single()
         if r:
-            return model.Node(id=r['identifier'], properties=r['n'], labels=r['node_labels'])
+            return model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels'])
         return None
 
 
@@ -129,13 +129,11 @@ class BaseCollection(abc.ABC):
     async def _total_count(self, txn: neo4j.AsyncTransaction) -> int:
         query = '''
         MATCH (n:%s)
-            WHERE $__label IN labels(n)
         RETURN COUNT(n) as total
         ''' % self.label
         res = await txn.run(query, parameters={})
         return (await res.single())['total']
-    
-class RetrievalStrategy(BaseCollection):
 
-    label = 'RetrievalStrategy'
-    schema = model.RetrievalStrategy
+def RetrievalStrategy(session: neo4j.AsyncSession): 
+
+    return Collection(session, 'RetrievalStrategy', model.RetrievalStrategy)

@@ -20,8 +20,53 @@ class Document(pydantic.BaseModel):
     file_type: str
     file_checksum: str
 
-class Node(pydantic.BaseModel):
+class ItemLinks(pydantic.BaseModel):
+    self: pydantic.HttpUrl
+
+
+N = typing.TypeVar("N")
+
+class Node(pydantic.BaseModel, typing.Generic[N]):
     id: int
     labels: list[str]
-    properties: dict[str, typing.Any]
-    
+    properties: N
+
+class NodeItem(Node):
+    links: ItemLinks
+
+class ItemListMeta(pydantic.BaseModel):
+    total_items: typing.Optional[int] = None
+    current_page: typing.Optional[int] = None
+    page_size: typing.Optional[int] = None
+    total_pages: typing.Optional[int] = None
+
+class ItemListLinks(pydantic.BaseModel):
+    first_page: typing.Optional[pydantic.AnyHttpUrl] = None
+    prev_page: typing.Optional[pydantic.AnyHttpUrl] = None
+    next_page: typing.Optional[pydantic.AnyHttpUrl] = None
+    final_page: typing.Optional[pydantic.AnyHttpUrl] = None
+
+class ItemList(pydantic.BaseModel, typing.Generic[N]):
+    data: list[N]
+    meta: ItemListMeta
+    links: ItemListLinks
+
+class SearchParam(pydantic.BaseModel):
+    query: str
+
+class SearchData(pydantic.BaseModel):
+    title: str
+    match: str
+    url: pydantic.AnyHttpUrl
+
+class SearchMeta(pydantic.BaseModel):
+    snippet: str
+
+class SearchResult(pydantic.BaseModel):
+    data: list[SearchData]
+    meta: SearchMeta
+
+class Message(pydantic.BaseModel):
+    msg: typing.Optional[str]
+
+
