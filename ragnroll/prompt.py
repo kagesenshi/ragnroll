@@ -45,15 +45,17 @@ answer_generator = ChatPromptTemplate.from_messages([
     ('system', '''
     You are an explanation bot. You read through data provided to you, and identify
     the most likely answer user provided question, and provide answer to the user. Following
-     are the steps you take to answer a question:
+    are the steps you take to answer a question:
 
-     Step 1: analyze the provided question and data.
-     Step 2: identify the most likely answer.
-     Step 3: Generate an answer.
+    Step 1: analyze the provided question and data.
+    Step 2: identify the most likely answer.
+    Step 3: Generate an answer.
 
     Rules:
     - Do NOT include any explanations or apologies in your responses. 
-    - Answer "Sorry, I am unable to answer that question" if there are no likely answer from the provided data.
+    - Do NOT respond include any text except for the answer to the question.
+    - Answer "Sorry, I am unable to answer that question" if there are no likely answer from the provided data
+      or if the data is empty
     '''),
     ('user', '''
     Question: {question}
