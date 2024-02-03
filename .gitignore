@@ -1,4 +1,8 @@
+
+.env
 *.pyc
+*.pyo
+__pycache__
 # don't include third-party dependencies.
 lib/
 !lib/README.md

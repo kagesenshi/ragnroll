@@ -6,7 +6,7 @@
         {
             "label": "Build",
             "type": "shell",
-            "command": "poetry install",
+            "command": "poetry self add poetry-dotenv-plugin;poetry install",
             "problemMatcher": [],
             "group": {
                 "kind": "build",

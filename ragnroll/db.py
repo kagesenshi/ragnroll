@@ -7,10 +7,14 @@ import abc
 import pydantic
 import typing
 from . import model
+from .crud.collection import Collection
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+import asyncio
 
 def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
     params = dict(
-        uri=settings.NEO4J_ADDRESS,
+        uri=settings.NEO4J_URI,
         database=settings.NEO4J_DATABASE,
     )
 
@@ -34,106 +38,47 @@ async def session(request: fastapi.Request) -> neo4j.AsyncSession:
     driver: neo4j.AsyncDriver = connect(request)
     return driver.session()
 
-S = typing.TypeVar("S")
-
-class Collection(abc.ABC, typing.Generic[S]):
-
-    def __init__(self, session: neo4j.AsyncSession, label: str, schema: type[pydantic.BaseModel]):
-        self.label = label
-        self.session = session
-        self.schema = schema
-
-    @property
-    def create_query(self) -> str:
-        fields = []
-        for name, field in self.schema.model_fields.items():
-            fields.append(f'{name}: ${name}')
-        return '''
-            CREATE (n:%s {%s})
-        ''' % (self.label, ',\n'.join(fields))
+class RetrievalStrategy(Collection[model.RetrievalStrategy]):
     
-    @property
-    def update_query(self) -> str:
-        fields = []
-        for name, field in self.schema.model_fields.items():
-            fields.append(f'{name}: ${name}')
-        return '''
-            MATCH (n:%s)
-                WHERE id(n) = $__node_id
-            SET n = {%s}
-            RETURN id(n) as identifier, n, labels(n) as node_labels
-        ''' % (self.label, ',\n'.join(fields))
-
+    def __init__(self, session: neo4j.AsyncSession, chat: BaseChatModel, embeddings: Embeddings): 
+        self.chat = chat
+        self.embeddings = embeddings
+        return super().__init__(session, 'RetrievalStrategy', model.RetrievalStrategy)
+    
+    async def match_question(self, query: str) -> list[model.Node[model.RetrievalStrategy]]:
+        await self.session.execute_write(self._create_vector_index)
+        return await self.session.execute_read(self._match_question, query)
+    
     async def create(self, item: model.RetrievalStrategy):
-        session = self.session
-        return await session.execute_write(self._create, item)
+        item.embedding = await self.embeddings.aembed_query(item.question)
+        return await super().create(item)
+    
+    async def update(self, node_id: int, item: model.RetrievalStrategy) -> model.Node[model.RetrievalStrategy]:
+        item.embedding = await self.embeddings.aembed_query(item.question)
+        return await super().update(node_id, item)
 
-    async def _create(self, txn: neo4j.AsyncTransaction, item: pydantic.BaseModel):
-        res = await txn.run(self.create_query, parameters=item.model_dump())
-        return True
-    
-    async def update(self, node_id: int, item: pydantic.BaseModel) -> model.Node:
-        return await self.session.execute_write(self._update, node_id, item)
-    
-    async def _update(self, txn: neo4j.AsyncTransaction, node_id: int, item: model.RetrievalStrategy) -> model.Node:
-        params = item.model_dump()
-        params['__node_id'] = node_id
-        res = await txn.run(self.update_query, parameters=params)
-        record = await res.single()
-        return model.Node[self.schema](id=record['identifier'], properties=record['n'], labels=record['node_labels'])
-    
-    async def list_all(self, limit=100, offset=0) -> list[model.Node]:
-        return await self.session.execute_read(self._list_all, limit=limit, offset=offset)
-    
-    async def _list_all(self, txn: neo4j.AsyncTransaction, limit=100, offset=0) -> list[model.Node[S]]:
-        query = '''
-        MATCH (n:%s)
-        RETURN n, id(n) as identifier, labels(n) as node_labels
-            SKIP $offset
-            LIMIT $limit
-        ''' % self.label
-        res = await txn.run(query, parameters={'limit': limit, 'offset': offset})
-        return [model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels']) for r in await res.data()]
-    
-    async def get(self, node_id) -> model.Node:
-        return await self.session.execute_read(self._get_by_id, node_id)
-    
-    async def _get_by_id(self, txn: neo4j.AsyncTransaction, node_id) -> model.Node[S]:
-        query = '''
-        MATCH (n:%s)
-            WHERE id(n) = $__node_id 
-            RETURN n, id(n) as identifier, labels(n) as node_labels
-        ''' % self.label
-        res = await txn.run(query, parameters={'__node_id': node_id})
-        r = await res.single()
-        if r:
-            return model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels'])
+    async def _create_vector_index(self, txn: neo4j.AsyncTransaction):
+        cypher = '''
+        CREATE VECTOR INDEX questions_embedding IF NOT EXISTS
+            FOR (n:%s)
+            ON (n.embedding)
+            OPTIONS { indexConfig: {
+                `vector.dimensions`: 1536,
+                `vector.similarity_function`: 'cosine'
+                }
+            }
+        ''' % (self.label)
+        res = await txn.run(cypher, parameters={})
         return None
-
-
-    async def delete(self, node_id: int) -> bool:
-        return await self.session.execute_write(self._delete, node_id)
     
-    async def _delete(self, txn: neo4j.AsyncTransaction, node_id: int):
-        query = '''
-        MATCH (n:%s)
-            WHERE id(n) = $__node_id 
-            DETACH DELETE n
-        ''' % self.label
-        res = await txn.run(query, parameters={'__node_id': node_id})
-        return True 
-    
-    async def total_count(self) -> int:
-        return await self.session.execute_read(self._total_count)
-    
-    async def _total_count(self, txn: neo4j.AsyncTransaction) -> int:
-        query = '''
-        MATCH (n:%s)
-        RETURN COUNT(n) as total
-        ''' % self.label
-        res = await txn.run(query, parameters={})
-        return (await res.single())['total']
-
-def RetrievalStrategy(session: neo4j.AsyncSession): 
-
-    return Collection(session, 'RetrievalStrategy', model.RetrievalStrategy)
+    async def _match_question(self, txn: neo4j.AsyncTransaction, query: str) -> model.ScoredNode[model.RetrievalStrategy]:
+        embedding = await self.embeddings.aembed_query(query)
+        cypher = '''
+        CALL db.index.vector.queryNodes('questions_embedding', 10, $embedding)
+        YIELD node, score
+        WITH node, score
+            WHERE $label in labels(node)
+        RETURN id(node) as identifier, node, labels(node) as node_labels, score
+        ''' 
+        res = await txn.run(cypher, parameters={'label': self.label, 'embedding': embedding})
+        return [model.ScoredNode[self.schema](id=r['identifier'], properties=r['node'], labels=r['node_labels'], score=r['score']) for r in await res.data()]

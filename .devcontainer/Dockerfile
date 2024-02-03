@@ -3,7 +3,7 @@ FROM registry.access.redhat.com/ubi8/ubi
 # Set the working directory to /app
 WORKDIR /workspace
 
-RUN dnf install sudo python3.11-devel python3.11-pip java-17-openjdk-headless -y && \
+RUN dnf install -y sudo python3.11-devel python3.11-pip java-17-openjdk-headless git vim-enhanced iputils -y && \
     dnf install https://dist.neo4j.org/cypher-shell/cypher-shell-5.15.0-1.noarch.rpm -y && \
     dnf clean all && \
     pip3.11 install -U pip setuptools setuptools-rust && \

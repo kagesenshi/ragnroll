@@ -12,6 +12,8 @@ neo4j = "^5.15.0"
 uvicorn = "^0.26.0"
 pydantic-settings = "^2.1.0"
 langchain = "^0.1.2"
+poetry-dotenv-plugin = "^0.2.0"
+langchain-openai = "^0.0.5"
 
 
 [build-system]

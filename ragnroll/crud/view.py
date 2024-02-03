@@ -1,4 +1,4 @@
-from . import db
+from .collection import Collection
 import typing
 import neo4j
 import fastapi
@@ -10,7 +10,7 @@ S = typing.TypeVar("S") # Model Schema
 
 class CollectionView(typing.Generic[S]):
 
-    def __init__(self, request: fastapi.Request, collection: db.Collection,
+    def __init__(self, request: fastapi.Request, collection: Collection,
                  list_endpoint: str, 
                  create_endpoint: str,
                  read_endpoint: str,
@@ -36,7 +36,7 @@ class CollectionView(typing.Generic[S]):
         data = record.model_dump()
         data['links'] = model.ItemLinks(self=str(self.request.url_for(self.read_endpoint, 
                                                                       entry_id=record.id)))
-        return self.col.schema(**data)
+        return model.NodeItem[self.col.schema](**data)
 
     async def list_all(self, page:int = 0, page_size: int = 100) -> model.ItemList[model.NodeItem[S]]:
         collection = self.col
