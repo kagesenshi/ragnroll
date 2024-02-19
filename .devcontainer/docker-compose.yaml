@@ -1,9 +1,8 @@
 version: '3.7'
 services:
   devcontainer:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
+    userns_mode: keep-id:uid=1000,gid=1000
+    image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9
     command: /bin/sh -c "while sleep 1000; do :; done"
     environment:
       - NEO4J_DATABASE=neo4j
@@ -13,8 +12,8 @@ services:
     volumes: 
       - ..:/workspace:cached
   neo4j:
+    userns_mode: keep-id:uid=7474,gid=7474
     image: docker.io/neo4j:5.15.0-enterprise-ubi8
-    
     environment:
       - NEO4J_apoc_export_file_enabled=true
       - NEO4J_apoc_import_file_enabled=true
