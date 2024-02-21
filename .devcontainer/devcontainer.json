@@ -17,5 +17,6 @@
 			]
 		}
 	},
-	"remoteUser": "user"
+	"remoteUser": "user",
+	"postCreateCommand": "cd backend;sh build.sh;cd ../web;sh build.sh"
 }

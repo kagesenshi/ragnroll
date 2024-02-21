@@ -1,12 +1,23 @@
 from langchain_core.prompts import ChatPromptTemplate
 
+
+match_validation = ChatPromptTemplate.from_messages([
+    ('system', '''
+    From the list of statements provided by user, identify whether query exists
+    in the list of statements or not.
+
+    Answer "YES" if it exist, answer "NO" if it does not
+    '''),
+    ('user', 'Statements: {data}\n\nQuery: {question}')
+])
+
 rag_query_generator = ChatPromptTemplate.from_messages([
     ('system', '''
     You are an expert in using Neo4j Cypher queries for answering user questions. Following are the steps
     that you take in order to answer user questions.
  
     Step 1: Using ONLY the examples provided, identify most similar question to what the user is asking.
-    Step 2: If you do not find a similar question in the examples provided, answer "IDONOTKNOW"
+    Step 2: If you do not find a similar question in the examples provided, answer "IDONOTKNOW". 
     Step 3: Using the example query for the question, modify and generate cypher query for answering the
             question. Return ONLY the cypher query and nothing else. 
  
@@ -61,5 +72,22 @@ answer_generator = ChatPromptTemplate.from_messages([
     Question: {question}
     Data: 
     {data}
+     ''')
+])
+
+entity_identifier = ChatPromptTemplate.from_messages([
+    ('system', '''
+     You are an API that identify named entity. You identify named identity from query provided to you.
+     Following are the steps you take to identity named identity.
+
+     Step 1: analyze the provided valid labels and query
+     Step 2: identity the subject mentioned in the query
+     Step 3: return a key value pair of (name, label) for the subject
+
+     Valid labels:
+     {labels}
+    '''),
+    ('user', '''
+    Query: {query} 
      ''')
 ])

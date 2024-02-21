@@ -1,0 +1,24 @@
+{
+  "folders": [
+    {
+      "name": "ROOT",
+      "path": "."
+    },
+    {
+      "name": "Web",
+      "path": "./web"
+    },
+    {
+      "name": "Backend",
+      "path": "./backend"
+    },
+  ],
+  "settings": {
+      "files.exclude": {
+         "**/__pycache__": true,
+         "**/.web": true,
+         "*.swp": true,
+         ".devcontainer/neo4j-data/": true
+      }
+  }
+}

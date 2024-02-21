@@ -13,11 +13,16 @@ from langchain_core.messages.base import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import GraphCypherQAChain
 from langchain.chains.graph_qa.cypher import extract_cypher
+from langchain_core.utils.input import get_colored_text, print_text, get_bolded_text
 from langchain_community.graphs import Neo4jGraph
 import json
 import asyncio
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
+
+class CypherChainOutput(typing.TypedDict):
+    query: str 
+    result: str
 
 async def retrieval_strategy(request: fastapi.Request) -> db.RetrievalStrategy:
     session = await db.session(request)
@@ -37,40 +42,63 @@ async def retrieval_strategy_view(request: fastapi.Request):
 
 async def _search(request: fastapi.Request, question: str):
     collection = await retrieval_strategy(request)
+    qachain = GraphCypherQAChain.from_llm(collection.chat, graph=Neo4jGraph(), verbose=True)
+    entity_chain = prompt.entity_identifier | collection.chat
     matches = await collection.match_question(question)
     matches = [{'question': m.properties.question, 'query': m.properties.query} for m in matches]
+    driver: neo4j.AsyncDriver = db.connect(request)
+    query: str = ''
     if len(matches):
+        print_text(get_bolded_text("> Entering intent matcher"), end='\n')
         chain = prompt.rag_query_generator | collection.chat 
         corrector_chain = prompt.cypher_corrector | collection.chat
         answer_chain = prompt.answer_generator | collection.chat
-        qachain = GraphCypherQAChain.from_llm(collection.chat, graph=Neo4jGraph(), verbose=True)
-        message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([json.dumps(match) for match in matches]), 'question': question})
-        query = message.content
-        snippet = ''
-        if query == 'IDONOTKNOW':
-            msg: str = await qachain.arun(question)
-            snippet = msg
+        match_validation = prompt.match_validation | collection.chat 
+
+        match_check:BaseMessage = await match_validation.ainvoke({'data': '\n'.join([m['question'] for m in matches]), 'question': question})
+
+        if match_check.content.upper().strip() == 'NO':
+            print_text('No intent found, fallback to GraphCypherQAChain', 'blue', end='\n')
+            msg: CypherChainOutput = await qachain.ainvoke(question)
+            snippet = msg['result']
+
         else:
-            driver: neo4j.AsyncDriver = db.connect(request)
-            async with driver.session() as session:
-                retry = 0
-                while retry < 3:
-                    try:
-                        res = await session.run(f'EXPLAIN {query}')
-                        print(await res.single())
-                        break
-                    except (neo4j.exceptions.CypherSyntaxError) as e:
-                        print(e.message)
-                        message = await corrector_chain.ainvoke({'query': query, 'error': e.message})
-                        query = extract_cypher(message.content)
-                        print(query)
-                    retry +=1 
-                data = await (await session.run(query)).data()
-                answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'data': '\n\n'.join([json.dumps(d) for d in data])})
-                snippet = answer.content
-                        
+            message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
+                f"Question: {match['question']}\nQuery: {match['query']}" for match in matches
+            ]), 'question': question})
+            query = message.content
+            snippet = ''
+            if query == 'IDONOTKNOW':
+                msg: CypherChainOutput = await qachain.ainvoke(question)
+                snippet = msg['result']
+            else:
+                driver: neo4j.AsyncDriver = db.connect(request)
+                async with driver.session() as session:
+                    retry = 0
+                    while retry < 3:
+                        try:
+                            res = await session.run(f'EXPLAIN {query}')
+                            print(await res.single())
+                            break
+                        except (neo4j.exceptions.CypherSyntaxError) as e:
+                            print(e.message)
+                            message = await corrector_chain.ainvoke({'query': query, 'error': e.message})
+                            query = extract_cypher(message.content)
+                            print(query)
+                        retry +=1 
+                    data = await (await session.run(query)).data()
+                    answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'data': '\n\n'.join([json.dumps(d) for d in data])})
+                    snippet = answer.content
     else:
-        snippet = 'Nothing'
+        msg: CypherChainOutput = await qachain.ainvoke(question)
+        snippet = msg['result']
+        query = ''
+
+    async with driver.session() as session:
+        res = await session.run('call db.labels()') 
+        labels = [r['label'] for r in (await res.data())]
+    possible_entity = await entity_chain.ainvoke({'query': question, 'labels': '\n'.join(labels)})
+    print(possible_entity)
 
     return {
         "data": [],
