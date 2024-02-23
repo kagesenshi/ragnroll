@@ -21,17 +21,29 @@ def box_style() -> dict:
 def definition_template() -> rx.Component:
     styles = box_style()
     return rx.box(
-        rx.text(State.summary),
+        rx.text(State.snippet),
         **styles,
     )
     
 def featuredSnippet() -> rx.Component:
-    return rx.cond(
-        State.searching, 
-        rx.box(rx.spinner()),
+    return rx.box(
         rx.cond(
-            State.summary,
-            definition_template(),
-            rx.box(),
+            State.searching, 
+            rx.box(rx.spinner()),
+            rx.cond(
+                State.snippet,
+                definition_template(),
+                None,
+            ),
+        ),
+        rx.cond(
+            State.snippet_queries,
+            rx.foreach(
+                State.snippet_queries,
+                lambda item: rx.box(
+                    rx.text(item)
+                )
+            ),
+            None
         )
     )    

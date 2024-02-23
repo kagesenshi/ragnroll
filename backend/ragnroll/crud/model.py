@@ -15,7 +15,7 @@ class Node(pydantic.BaseModel, typing.Generic[N]):
     labels: list[str]
     properties: N
 
-class ScoredNode(Node):
+class ScoredNode(Node[N]):
     score: typing.Optional[float] = None
 
 class NodeItem(Node):
@@ -47,8 +47,8 @@ class SearchData(pydantic.BaseModel):
     url: pydantic.AnyHttpUrl
 
 class SearchMeta(pydantic.BaseModel):
-    snippet: str
-    query: str
+    snippet: typing.Optional[str]
+    queries: list[typing.Optional[str]]
 
 class SearchResult(pydantic.BaseModel):
     data: list[SearchData]

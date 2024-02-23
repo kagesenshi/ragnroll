@@ -8,3 +8,4 @@ lib/
 !lib/README.md
 .DS_Store
 .devcontainer/neo4j-data
+**/.venv

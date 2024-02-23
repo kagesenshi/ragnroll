@@ -7,11 +7,14 @@ from ragnroll_web.state import State
 import reflex as rx
 
 def index() -> rx.Component:
+
     return rx.vstack(
         navbar(),
         sidebar(),
+
+        # alert box 
         rx.cond(
-            State.alert_message != "",
+            State.alert_message,
             rx.alert(
                 rx.alert_icon(),
                 rx.alert_title(
@@ -20,32 +23,21 @@ def index() -> rx.Component:
                 status = "error",
             ),
         ),
-        rx.cond(
-            State.valid_input,
-            rx.hstack(
-                rx.box(width="23%"),
-                rx.vstack(
-                    featuredSnippet(),
-                    searchResult(),
-                ),
-                rx.cond(
-                    State.has_kp,
-                    knowledgepanel(),
-                    None,
-                ),
-                rx.box(width="10%"), #acts a spacer
-                justify="end", #moves the components to the right side(end)
-                align_items="start", #align to top vertically
-                justify_contents="center",
+        rx.hstack(
+            rx.box(width="23%"),
+            rx.vstack(
+                featuredSnippet(),
+                searchResult(),
             ),
-            rx.box(
-                rx.spinner(
-                    color="lightgreen",
-                    thickness=5,
-                    speed="0.5s",
-                    size="xl",
-                ),
+            rx.cond(
+                State.has_kp,
+                knowledgepanel(),
+                None,
             ),
+            rx.box(width="10%"), #acts a spacer
+            justify="end", #moves the components to the right side(end)
+            align_items="start", #align to top vertically
+            justify_contents="center",
         ),
         justify="start",
     )

@@ -77,7 +77,7 @@ class CollectionView(typing.Generic[S]):
         data['links'] = model.ItemLinks(
             self=str(self.request.url_for(self.read_endpoint, 
                     entry_id=updated.id)))
-        return self.col.schema(**data)
+        return model.NodeItem[self.col.schema](**data)
 
     async def delete(self, entry_id: int) -> model.Message:
         record = await self.col.get(entry_id)

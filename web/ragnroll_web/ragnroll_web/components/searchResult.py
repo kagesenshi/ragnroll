@@ -2,6 +2,7 @@ import reflex as rx
 
 from ragnroll_web.state import State
 from typing import Dict
+from .util import spinner
 
 def box_style() -> dict:
     return{
@@ -16,13 +17,7 @@ def box_style() -> dict:
 def searchResult() -> rx.Component:
 
     return rx.cond(State.searching, 
-         rx.box(rx.spinner(
-             
-                    color="lightgreen",
-                    thickness=5,
-                    speed="0.5s",
-                    size="xl",
-         )),              
+         rx.box(spinner()),              
          rx.cond(
             State.search_result_list,
             rx.vstack(
@@ -42,7 +37,6 @@ def noResultFoundTemplate() -> rx.Component:
 def searchResultTemplate(item: Dict[str, str]) -> rx.Component:
     styles = box_style()
     return rx.box(
-        # rx.heading(item["cafeName"], size="sm", color="blue"),
         rx.link(
             item["title"],
             href=item['url'],

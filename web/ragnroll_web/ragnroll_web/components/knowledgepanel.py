@@ -19,17 +19,12 @@ def thing_template() -> rx.Component:
     styles = panel_style()
     return rx.box(
         rx.vstack(
-            rx.heading(State.cafe_name, size="md"),
-           
+            rx.heading('Title', size="md"),
             rx.image(
                 src= "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRtdnR2i_9aipQLrEkLzm7NNxzy6mwhNjDYijEQMLgPMEwr6MsY7SiqXSuEDyTEjO9GKfU&usqp=CAU",
                 width = "auto",
                 height = "auto",
             ),
-            rx.text("City: " + State.cafe_city),
-            rx.text("Rating: " + State.cafe_rating),
-            rx.text("Rate for two: " + State.cafe_rateForTwo),
-            
             align_items = "left",
             align="start"
         ),

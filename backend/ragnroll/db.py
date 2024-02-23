@@ -45,9 +45,9 @@ class RetrievalStrategy(Collection[model.RetrievalStrategy]):
         self.embeddings = embeddings
         return super().__init__(session, 'RetrievalStrategy', model.RetrievalStrategy)
     
-    async def match_question(self, query: str) -> list[model.Node[model.RetrievalStrategy]]:
+    async def match_question(self, query: str, count: int = 10, min_score=0) -> list[model.ScoredNode[model.RetrievalStrategy]]:
         await self.session.execute_write(self._create_vector_index)
-        return await self.session.execute_read(self._match_question, query)
+        return await self.session.execute_read(self._match_question, query, count = count, min_score = min_score)
     
     async def create(self, item: model.RetrievalStrategy):
         item.embedding = await self.embeddings.aembed_query(item.question)
@@ -71,14 +71,15 @@ class RetrievalStrategy(Collection[model.RetrievalStrategy]):
         res = await txn.run(cypher, parameters={})
         return None
     
-    async def _match_question(self, txn: neo4j.AsyncTransaction, query: str) -> model.ScoredNode[model.RetrievalStrategy]:
+    async def _match_question(self, txn: neo4j.AsyncTransaction, query: str, count: int =10, min_score: int=0) -> model.ScoredNode[model.RetrievalStrategy]:
         embedding = await self.embeddings.aembed_query(query)
         cypher = '''
-        CALL db.index.vector.queryNodes('questions_embedding', 10, $embedding)
+        CALL db.index.vector.queryNodes('questions_embedding', $count, $embedding)
         YIELD node, score
         WITH node, score
             WHERE $label in labels(node)
+            AND score > $min_score
         RETURN id(node) as identifier, node, labels(node) as node_labels, score
         ''' 
-        res = await txn.run(cypher, parameters={'label': self.label, 'embedding': embedding})
+        res = await txn.run(cypher, parameters={'label': self.label, 'embedding': embedding, 'count': count, 'min_score': min_score})
         return [model.ScoredNode[self.schema](id=r['identifier'], properties=r['node'], labels=r['node_labels'], score=r['score']) for r in await res.data()]

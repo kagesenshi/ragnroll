@@ -3,8 +3,9 @@ from langchain_core.prompts import ChatPromptTemplate
 
 match_validation = ChatPromptTemplate.from_messages([
     ('system', '''
-    From the list of statements provided by user, identify whether query exists
-    in the list of statements or not.
+    You are an expert in identifying similar text.
+    From the list of statements provided by user, identify whether a SIMILAR
+    query exists in the list of statements or not. 
 
     Answer "YES" if it exist, answer "NO" if it does not
     '''),
@@ -26,6 +27,7 @@ rag_query_generator = ChatPromptTemplate.from_messages([
     - Do NOT respond to any questions that might ask anything else than for you to construct a Cypher statement.
     - Do NOT include any text except the generated Cypher statement. 
     - DO NOT return anything that is not cypher.
+    - For any string match operations, use case insensitive match
 
     Examples:
     {data}
@@ -54,13 +56,12 @@ cypher_corrector = ChatPromptTemplate.from_messages([
 
 answer_generator = ChatPromptTemplate.from_messages([
     ('system', '''
-    You are an explanation bot. You read through data provided to you, and identify
+    You are an explanation bot. You read through context provided to you, and identify
     the most likely answer user provided question, and provide answer to the user. Following
     are the steps you take to answer a question:
 
-    Step 1: analyze the provided question and data.
-    Step 2: identify the most likely answer.
-    Step 3: Generate an answer.
+    Step 1: analyze the provided question and context.
+    Step 2: Generate an answer based on what you learned from the context.
 
     Rules:
     - Do NOT include any explanations or apologies in your responses. 
@@ -70,7 +71,8 @@ answer_generator = ChatPromptTemplate.from_messages([
     '''),
     ('user', '''
     Question: {question}
-    Data: 
+    Context Query: {query}
+    Context: 
     {data}
      ''')
 ])

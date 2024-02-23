@@ -15,14 +15,14 @@ def get_parser():
     serve_parser.add_argument('-r', '--reload', action='store_true', default=False)
     return parser
 
-def run():
+def run(args=sys.argv[1:]):
 
     commands = {
         'serve': serve
     }
 
     parser = get_parser()
-    p_args = parser.parse_args()
+    p_args = parser.parse_args(args=args)
     if getattr(p_args, 'command', None) is None: 
         parser.print_help()
         sys.exit(1)
@@ -35,3 +35,6 @@ def run():
     if out is None:
         sys.exit(0)
     sys.exit(out)
+
+if __name__ == '__main__':
+    run()
