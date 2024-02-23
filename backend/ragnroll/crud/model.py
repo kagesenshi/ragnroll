@@ -18,7 +18,7 @@ class Node(pydantic.BaseModel, typing.Generic[N]):
 class ScoredNode(Node[N]):
     score: typing.Optional[float] = None
 
-class NodeItem(Node):
+class NodeItem(Node[N]):
     links: ItemLinks
 
 class ItemListMeta(pydantic.BaseModel):
