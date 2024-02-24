@@ -21,6 +21,8 @@ TODO:
 This whole repository is built with VSCode Devcontainer with docker-compose. Load
 it up using VSCode and the build process should be automatic.
 
+After the environment is up, create `backend/.env` file and put in `OPENAI_API_KEY=<apikey>`
+
 Tested on Fedora 39
 
 ## Starting up
