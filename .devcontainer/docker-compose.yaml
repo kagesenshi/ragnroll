@@ -27,4 +27,5 @@ services:
       - 7687:7687
     volumes:
       - ./neo4j-data:/data
-
+    tmpfs:
+      - /var/lib/neo4j/run/
