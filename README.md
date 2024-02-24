@@ -33,3 +33,4 @@ to run the FastAPI Backend.
 - `http://localhost:3000` - Reflex Web UI
 - `http://localhost:8000` - Reflex Websocket
 - `http://localhost:5000/docs` - FastAPI Backend
+- `http://localhost;7474` - Neo4j browser
