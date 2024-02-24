@@ -21,6 +21,8 @@ TODO:
 This whole repository is built with VSCode Devcontainer with docker-compose. Load
 it up using VSCode and the build process should be automatic.
 
+Tested on Fedora 39
+
 ## Starting up
 
 `launch.json` have been configured with 2 tasks, one to run Web UI and another
