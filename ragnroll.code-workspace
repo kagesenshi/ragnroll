@@ -18,6 +18,7 @@
          "**/__pycache__": true,
          "**/.web": true,
          "*.swp": true,
+         "**/.venv": true, 
          ".devcontainer/neo4j-data/": true
       },
       "remote.autoForwardPorts": false,
