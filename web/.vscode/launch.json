@@ -11,9 +11,8 @@
             "module": "reflex.reflex",
             "envFile": "${workspaceFolder}/.env",
             "args": ["run"],
-            "console": "internalConsole",
+            "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/ragnroll_web/",
-            "internalConsoleOptions": "openOnSessionStart"
         }
     ]
 }

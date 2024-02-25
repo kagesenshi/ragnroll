@@ -28,5 +28,21 @@
          {"name": "Frontend (UI)", "localPort": 3000, "remotePort": 3000}
       ],
       "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+  },
+  "launch": {
+      "compounds": [{
+          "name": "Launch Web & Backend",
+          "configurations": [
+            {
+               "folder": "Backend",
+               "name": "Run"
+            },
+            {
+              "folder": "Web",
+              "name": "Run"
+            }
+         ],
+         "stopAll": true
+      }]
   }
 }
