@@ -62,6 +62,28 @@ files = [
 ]
 
 [[package]]
+name = "build"
+version = "1.1.1"
+description = "A simple, correct Python build frontend"
+optional = false
+python-versions = ">= 3.7"
+files = [
+    {file = "build-1.1.1-py3-none-any.whl", hash = "sha256:8ed0851ee76e6e38adce47e4bee3b51c771d86c64cf578d0c2245567ee200e73"},
+    {file = "build-1.1.1.tar.gz", hash = "sha256:8eea65bb45b1aac2e734ba2cc8dad3a6d97d97901a395bd0ed3e7b46953d2a31"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "os_name == \"nt\""}
+packaging = ">=19.0"
+pyproject_hooks = "*"
+
+[package.extras]
+docs = ["furo (>=2023.08.17)", "sphinx (>=7.0,<8.0)", "sphinx-argparse-cli (>=1.5)", "sphinx-autodoc-typehints (>=1.10)", "sphinx-issues (>=3.0.0)"]
+test = ["filelock (>=3)", "pytest (>=6.2.4)", "pytest-cov (>=2.12)", "pytest-mock (>=2)", "pytest-rerunfailures (>=9.1)", "pytest-xdist (>=1.34)", "setuptools (>=42.0.0)", "setuptools (>=56.0.0)", "setuptools (>=56.0.0)", "setuptools (>=67.8.0)", "wheel (>=0.36.0)"]
+typing = ["importlib-metadata (>=5.1)", "mypy (>=1.5.0,<1.6.0)", "tomli", "typing-extensions (>=3.7.4.3)"]
+virtualenv = ["virtualenv (>=20.0.35)"]
+
+[[package]]
 name = "certifi"
 version = "2024.2.2"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -699,6 +721,17 @@ plugins = ["importlib-metadata"]
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pyproject-hooks"
+version = "1.0.0"
+description = "Wrappers to call pyproject.toml-based build backend hooks."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "pyproject_hooks-1.0.0-py3-none-any.whl", hash = "sha256:283c11acd6b928d2f6a7c73fa0d01cb2bdc5f07c57a2eeb6e83d5e56b97976f8"},
+    {file = "pyproject_hooks-1.0.0.tar.gz", hash = "sha256:f271b298b97f5955d53fb12b72c1fb1948c22c1a6b70b315c54cedaca0264ef5"},
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.8.2"
 description = "Extensions to the standard Python datetime module"
@@ -784,17 +817,18 @@ ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==20.0.1)", "requests (>=2.26.0)"
 
 [[package]]
 name = "reflex"
-version = "0.3.10"
+version = "0.4.3"
 description = "Web apps in pure Python."
 optional = false
 python-versions = ">=3.8,<4.0"
 files = [
-    {file = "reflex-0.3.10-py3-none-any.whl", hash = "sha256:9000b853dae5d53b69344127637670b326c825e97b8ca48a0961412fb39f2a7b"},
-    {file = "reflex-0.3.10.tar.gz", hash = "sha256:8b4b9e749d12b984c5cc275e38f1c9d9e91239ba2693fbc7331c2cc7f7bd8248"},
+    {file = "reflex-0.4.3-py3-none-any.whl", hash = "sha256:4c6bc22216abddb1cef7bc80fb69902769e834d52606884254eedc45b55f4698"},
+    {file = "reflex-0.4.3.tar.gz", hash = "sha256:76a6a8da7252e53f925e20fd65463ef55b68f306e80dfa2f4d9379f76637d519"},
 ]
 
 [package.dependencies]
 alembic = ">=1.11.1,<2.0.0"
+build = ">=1.0.3,<2.0.0"
 charset-normalizer = ">=3.3.2,<4.0.0"
 cloudpickle = ">=2.2.1,<3.0.0"
 distro = {version = ">=1.8.0,<2.0.0", markers = "sys_platform == \"linux\""}
@@ -813,6 +847,7 @@ python-socketio = ">=5.7.0,<6.0.0"
 redis = ">=4.3.5,<5.0.0"
 reflex-hosting-cli = ">=0.1.2"
 rich = ">=13.0.0,<14.0.0"
+setuptools = ">=69.1.1,<70.0.0"
 sqlmodel = ">=0.0.14,<0.0.15"
 starlette-admin = ">=0.9.0,<0.10.0"
 typer = ">=0.4.2,<1"
@@ -822,6 +857,7 @@ uvicorn = [
 ]
 watchdog = ">=2.3.1,<3.0.0"
 watchfiles = ">=0.19.0,<0.20.0"
+wheel = ">=0.42.0,<0.43.0"
 wrapt = {version = ">=1.14.0,<2.0.0", markers = "python_version >= \"3.11\""}
 
 [[package]]
@@ -889,19 +925,19 @@ jupyter = ["ipywidgets (>=7.5.1,<9)"]
 
 [[package]]
 name = "setuptools"
-version = "69.1.0"
+version = "69.1.1"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "setuptools-69.1.0-py3-none-any.whl", hash = "sha256:c054629b81b946d63a9c6e732bc8b2513a7c3ea645f11d0139a2191d735c60c6"},
-    {file = "setuptools-69.1.0.tar.gz", hash = "sha256:850894c4195f09c4ed30dba56213bf7c3f21d86ed6bdaafb5df5972593bfc401"},
+    {file = "setuptools-69.1.1-py3-none-any.whl", hash = "sha256:02fa291a0471b3a18b2b2481ed902af520c69e8ae0919c13da936542754b4c56"},
+    {file = "setuptools-69.1.1.tar.gz", hash = "sha256:5c0806c7d9af348e6dd3777b4f4dbb42c7ad85b190104837488eab9a7c945cf8"},
 ]
 
 [package.extras]
 docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "pygments-github-lexers (==0.0.5)", "rst.linker (>=1.9)", "sphinx (<7.2.5)", "sphinx (>=3.5)", "sphinx-favicon", "sphinx-inline-tabs", "sphinx-lint", "sphinx-notfound-page (>=1,<2)", "sphinx-reredirects", "sphinxcontrib-towncrier"]
-testing = ["build[virtualenv]", "filelock (>=3.4.0)", "flake8-2020", "ini2toml[lite] (>=0.9)", "jaraco.develop (>=7.21)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pip (>=19.1)", "pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-home (>=0.5)", "pytest-mypy (>=0.9.1)", "pytest-perf", "pytest-ruff (>=0.2.1)", "pytest-timeout", "pytest-xdist", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel"]
-testing-integration = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "packaging (>=23.1)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
+testing = ["build[virtualenv]", "filelock (>=3.4.0)", "flake8-2020", "ini2toml[lite] (>=0.9)", "jaraco.develop (>=7.21)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "packaging (>=23.2)", "pip (>=19.1)", "pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-home (>=0.5)", "pytest-mypy (>=0.9.1)", "pytest-perf", "pytest-ruff (>=0.2.1)", "pytest-timeout", "pytest-xdist", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel"]
+testing-integration = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "packaging (>=23.2)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
 
 [[package]]
 name = "simple-websocket"
@@ -1338,6 +1374,20 @@ files = [
 ]
 
 [[package]]
+name = "wheel"
+version = "0.42.0"
+description = "A built-package format for Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "wheel-0.42.0-py3-none-any.whl", hash = "sha256:177f9c9b0d45c47873b619f5b650346d632cdc35fb5e4d25058e09c9e581433d"},
+    {file = "wheel-0.42.0.tar.gz", hash = "sha256:c45be39f7882c9d34243236f2d63cbd58039e360f85d0913425fbd7ceea617a8"},
+]
+
+[package.extras]
+test = ["pytest (>=6.0.0)", "setuptools (>=65)"]
+
+[[package]]
 name = "wrapt"
 version = "1.16.0"
 description = "Module for decorators, wrappers and monkey patching."
@@ -1447,4 +1497,4 @@ requests = "*"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "c6bae7c5d6e82bfd1c9ac664bc7965bffd592b39d7c928a456420ab4974c3bfd"
+content-hash = "be78e0499cc782821ca9f1e1b304c6d5c0a579d3ab159de26ab51943cdbe5a87"

@@ -16,34 +16,23 @@ def box_style() -> dict:
     
 def searchResult() -> rx.Component:
 
-    return rx.cond(State.searching, 
-         rx.box(spinner()),              
-         rx.cond(
+    return rx.cond(
             State.search_result_list,
-            rx.vstack(
+            rx.chakra.vstack(
                 rx.foreach(State.search_result_list, searchResultTemplate)
-            ),
-            noResultFoundTemplate()
-    ))
-    
-def noResultFoundTemplate() -> rx.Component:
-    return rx.box()
-#    styles = box_style()
-#    return rx.box(
-#        rx.text("No results found"),
-#        **styles,
-#    )
+            )
+    )
     
 def searchResultTemplate(item: Dict[str, str]) -> rx.Component:
     styles = box_style()
-    return rx.box(
-        rx.link(
+    return rx.chakra.box(
+        rx.chakra.link(
             item["title"],
             href=item['url'],
             color="rgb(107,99,246)",
             style={"font_size": "1.1rem"},
         ),
-        rx.text(item["description"]),
+        rx.chakra.text(item["description"]),
         **styles,
     )
     

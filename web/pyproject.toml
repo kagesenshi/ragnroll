@@ -8,7 +8,7 @@ packages = [{include = "ragnroll_web"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-reflex = "0.3.10"
+reflex = "0.4.3"
 
 [build-system]
 requires = ["poetry-core"]

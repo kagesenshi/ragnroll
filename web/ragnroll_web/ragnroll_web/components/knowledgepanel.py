@@ -17,10 +17,10 @@ def panel_style():
     
 def thing_template() -> rx.Component:
     styles = panel_style()
-    return rx.box(
-        rx.vstack(
-            rx.heading('Title', size="md"),
-            rx.image(
+    return rx.chakra.box(
+        rx.chakra.vstack(
+            rx.chakra.heading('Title', size="md"),
+            rx.chakra.image(
                 src= "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRtdnR2i_9aipQLrEkLzm7NNxzy6mwhNjDYijEQMLgPMEwr6MsY7SiqXSuEDyTEjO9GKfU&usqp=CAU",
                 width = "auto",
                 height = "auto",
@@ -53,6 +53,6 @@ def knowledgepanel() -> rx.Component:
 #                 )
 #             )
 #         ),
-#         rx.box() # If State.valid_input is False, an empty rx.box() is returned
-#         # rx.box("width": "340px")
+#         rx.chakra.box() # If State.valid_input is False, an empty rx.chakra.box() is returned
+#         # rx.chakra.box("width": "340px")
 #     )

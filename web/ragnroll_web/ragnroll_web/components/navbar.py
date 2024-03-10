@@ -3,10 +3,10 @@ import reflex as rx
 from ragnroll_web.state import State
 
 def navbar() -> rx.Component:
-    return rx.box(
-        rx.hstack(
-            rx.spacer(flex=1),
-            rx.icon(
+    return rx.chakra.box(
+        rx.chakra.hstack(
+            rx.chakra.spacer(flex=1),
+            rx.chakra.icon(
                 tag="hamburger",
                 on_click=State.toggle_drawer,
                 width="1.5em",
@@ -16,20 +16,20 @@ def navbar() -> rx.Component:
                 mr=3,
             ),
             
-            rx.spacer(flex=4, display=["none", "none", "none", "flex", "flex"]),
-            rx.spacer(flex=0.5),
+            rx.chakra.spacer(flex=4, display=["none", "none", "none", "flex", "flex"]),
+            rx.chakra.spacer(flex=0.5),
             
-            rx.box(
-                rx.center(
-                    rx.input(
+            rx.chakra.box(
+                rx.chakra.center(
+                    rx.chakra.input(
                         flex=4,
                         placeholder="Search here...",
                         id="search_input",
                         on_change=State.set_query,
                         on_key_down=State.handle_enter,
                     ),
-                    rx.button(
-                        rx.icon(tag="search2"),
+                    rx.chakra.button(
+                        rx.chakra.icon(tag="search2"),
                         width="45%",
                         flex=0.5,
                         on_click=State.handle_submit,
@@ -38,24 +38,24 @@ def navbar() -> rx.Component:
                 flex=12,
             ),
             
-            rx.spacer(flex=3),
+            rx.chakra.spacer(flex=3),
             
-            rx.hstack(
-                rx.button(
-                    rx.icon(
+            rx.chakra.hstack(
+                rx.chakra.button(
+                    rx.chakra.icon(
                         tag="bell"
                     ),
                     variant="ghost"
                 ),
-                rx.menu(
-                    rx.menu_button(
-                        rx.avatar(name="John Doe", size="sm")
+                rx.chakra.menu(
+                    rx.chakra.menu_button(
+                        rx.chakra.avatar(name="John Doe", size="sm")
                     ),
-                    rx.menu_list(
-                        rx.menu_item("My profile"),
-                        rx.menu_divider(),
-                        rx.menu_item("Settings"),
-                        rx.menu_item("Help"),
+                    rx.chakra.menu_list(
+                        rx.chakra.menu_item("My profile"),
+                        rx.chakra.menu_divider(),
+                        rx.chakra.menu_item("Settings"),
+                        rx.chakra.menu_item("Help"),
                     ),
                 ),
                 
@@ -63,7 +63,7 @@ def navbar() -> rx.Component:
                 display=["none", "none", "none", "flex", "flex", "flex", "flex"],
                 align_items="center",
             ),
-            rx.spacer(flex=1),
+            rx.chakra.spacer(flex=1),
             align_items="center",
         ),
         bg="rgba(255,255,255, 0.9)",
@@ -74,4 +74,5 @@ def navbar() -> rx.Component:
         position="sticky",
         z_index="999",
         top="0",
+        id="navbar"
     )

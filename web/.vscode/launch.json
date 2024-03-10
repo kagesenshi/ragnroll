@@ -11,8 +11,13 @@
             "module": "reflex.reflex",
             "envFile": "${workspaceFolder}/.env",
             "args": ["run"],
-            "console": "integratedTerminal",
+            "console": "internalConsole",
             "cwd": "${workspaceFolder}/ragnroll_web/",
+            "presentation": {
+                "hidden": true,
+                "group": "",
+                "order": 1
+            }
         }
     ]
 }

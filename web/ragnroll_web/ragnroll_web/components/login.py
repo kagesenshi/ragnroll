@@ -2,20 +2,20 @@ import reflex as rx
 from ragnroll_web.state import State
 
 def login():
-    return rx.vstack(
-        rx.span("Welcome!"),
-        rx.span("Sign in or sign up to get started."),
-        rx.box(),
-        rx.box(
-            rx.input(placeholder="Username", on_blur=State.set_username, mb=4),
-            # rx.input(placeholder="Username", mb=4),
-            rx.input(
+    return rx.chakra.vstack(
+        rx.chakra.span("Welcome!"),
+        rx.chakra.span("Sign in or sign up to get started."),
+        rx.chakra.box(),
+        rx.chakra.box(
+            rx.chakra.input(placeholder="Username", on_blur=State.set_username, mb=4),
+            # rx.chakra.input(placeholder="Username", mb=4),
+            rx.chakra.input(
                 type_="password",
                 placeholder="Password",
                 on_blur=State.set_password,
                 mb=4,
             ),
-            rx.button(
+            rx.chakra.button(
                 "Log in",
                 on_click=State.login,
                 bg="blue.500",
@@ -30,9 +30,9 @@ def login():
             border_radius="lg",
         ),
         
-        rx.text(
+        rx.chakra.text(
             "Don't have an account yet?",
-            rx.link("Sign up here.", href="/signup",color="blue.500"),
+            rx.chakra.link("Sign up here.", href="/signup",color="blue.500"),
             color="gray.600",
         ),
         align='center',

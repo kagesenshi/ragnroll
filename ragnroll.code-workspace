@@ -2,7 +2,10 @@
   "folders": [
     {
       "name": "ROOT",
-      "path": "."
+      "path": ".",
+      "settings": {
+        "python.defaultInterpreterPath": "/var/lib/user/poetry/bin/python"
+      }
     },
     {
       "name": "Web",
@@ -22,12 +25,14 @@
          ".devcontainer/neo4j-data/": true
       },
       "remote.autoForwardPorts": false,
-      "remote.SSH.defaultForwardedPorts": [
-         {"name": "Backend", "localPort": 5000, "remotePort": 5000},
-         {"name": "Frontend (WS)", "localPort": 8000, "remotePort": 8000},
-         {"name": "Frontend (UI)", "localPort": 3000, "remotePort": 3000}
-      ],
-      "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+      "remote.forwardOnOpen": false,
+      "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+      "[python]": {
+        "diffEditor.ignoreTrimWhitespace": false,
+        "editor.formatOnType": true,
+        "editor.wordBasedSuggestions": "off",
+        "editor.defaultFormatter": "ms-python.black-formatter"
+      }
   },
   "launch": {
       "compounds": [{
@@ -42,7 +47,12 @@
               "name": "Run"
             }
          ],
-         "stopAll": true
+         "stopAll": true,
+         "presentation": {
+          "hidden": false,
+          "group": "",
+          "order": 0
+         }
       }]
   }
 }

@@ -3,45 +3,31 @@ from rxconfig import config
 
 from ragnroll_web.components import navbar, sidebar, login, searchResult, featuredSnippet, knowledgepanel
 from ragnroll_web.state import State
-
+from .components.util import wrap_search
 import reflex as rx
+
 
 def index() -> rx.Component:
 
-    return rx.vstack(
+    return rx.chakra.vstack(
         navbar(),
         sidebar(),
-
-        # alert box 
+        # alert box
         rx.cond(
             State.alert_message,
-            rx.alert(
-                rx.alert_icon(),
-                rx.alert_title(
-                    State.alert_message
-                ),
-                status = "error",
+            rx.chakra.alert(
+                rx.chakra.alert_icon(),
+                rx.chakra.alert_title(State.alert_message),
+                status="error",
             ),
         ),
-        rx.hstack(
-            rx.box(width="23%"),
-            rx.vstack(
-                featuredSnippet(),
-                searchResult(),
-            ),
-            rx.cond(
-                State.has_kp,
-                knowledgepanel(),
-                None,
-            ),
-            rx.box(width="10%"), #acts a spacer
-            justify="end", #moves the components to the right side(end)
-            align_items="start", #align to top vertically
-            justify_contents="center",
+        wrap_search(
+            featuredSnippet(),
         ),
-        justify="start",
+        width="100%",
     )
-    
+
+
 # Add state and page to the app.
 app = rx.App()
 app.add_page(index)

@@ -2,7 +2,7 @@ version: '3.7'
 services:
   devcontainer:
     userns_mode: keep-id:uid=1000,gid=1000
-    image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9
+    image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9-0.1.0
     command: tail -f /dev/null
     environment:
       - NEO4J_DATABASE=neo4j
@@ -12,6 +12,10 @@ services:
     volumes: 
       - ..:/workspace:cached
       - ~/.cache:/home/user/.cache
+    ports:
+      - 8000:8000
+      - 5000:5000
+      - 3000:3000
   neo4j:
     userns_mode: keep-id:uid=7474,gid=7474
     image: docker.io/neo4j:5.16.0-enterprise-ubi8

@@ -11,6 +11,10 @@ from . import log
 from . import settings
 import typing
 
+class SnippetQuery(typing.TypedDict):
+    query: str
+    result: str
+
 class State(rx.State):
     """The app state."""
     
@@ -22,7 +26,7 @@ class State(rx.State):
     search_result_list: List[Dict[str, str]] = []
     
     snippet: typing.Optional[str] = ""
-    snippet_queries: list[str] = []
+    snippet_queries: list[dict[str, str]] = []
     query: str = ''
     has_kp: bool = False
     alert_message: str = ""
@@ -47,7 +51,8 @@ class State(rx.State):
                 response = await client.get(f'{settings.BACKEND_URI}/search', params={'question': self.query})
                 data = response.json()
             self.snippet = data['meta']['snippet']
-            print(self.snippet)
+            self.snippet_queries = data['meta']['queries']
+            print("Snippet: ", data)
         except httpx.ReadTimeout:
             yield
         except httpx.ConnectError:
