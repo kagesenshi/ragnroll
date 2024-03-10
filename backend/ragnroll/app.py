@@ -20,6 +20,9 @@ from langchain_core.utils.input import get_colored_text, print_text, get_bolded_
 from langchain_community.graphs import Neo4jGraph
 import json
 import asyncio
+import neo4j.spatial
+import neo4j.time
+import neo4j.graph
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
 
@@ -27,6 +30,29 @@ class CypherChainOutput(typing.TypedDict):
     query: str 
     result: str
     intermediate_steps: list[dict]
+
+class Neo4jJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+#        if isinstance(obj, neo4j.graph.Node):
+#            return {'labels': obj.labels, 'properties': dict(obj)}
+#        elif isinstance(obj, neo4j.graph.Relationship):
+#            return {'type': obj.type, 'properties': dict(obj)}
+#        elif isinstance(obj, neo4j.graph.Path):
+#            return {'nodes': list(obj.nodes), 'relationships': list(obj.relationships)}
+#        elif isinstance(obj, neo4j.spatial.Point):
+#            return {'crs': obj.crs, 'coordinates': obj.coordinates}
+#        elif isinstance(obj, neo4j.time.Duration):
+#            return {'months': obj.months, 'days': obj.days, 'seconds': obj.seconds, 'nanoseconds': obj.nanoseconds}
+        if isinstance(obj, neo4j.time.Date):
+            return obj.iso_format()
+        elif isinstance(obj, neo4j.time.Time):
+            return obj.iso_format()
+        elif isinstance(obj, neo4j.time.DateTime):
+            return obj.iso_format()
+        return super().default(obj)
+
+def jsonify_result(data: typing.Any, **kwargs):
+    return json.dumps(data, cls=Neo4jJSONEncoder, **kwargs)
 
 async def retrieval_strategy(request: fastapi.Request) -> db.RetrievalStrategy:
     session = await db.session(request)
@@ -95,26 +121,21 @@ async def _get_snippet(request: fastapi.Request, question:str):
     print(f'Generated query: {query}')
     query = await query_corrector(query)
     print(f'Corrected query: {query}')
+    # add object limit to 100
+    query = query + ' LIMIT 100 '
+    query = await query_corrector(query)
+    print(f'Final query: {query}')
     async with driver.session() as session:
         data = await (await session.run(query)).data()
-        print(data)
-        answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': json.dumps(data)})
+        answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
         snippet = answer.content
         return {
             'snippet': snippet,
-            'queries': [query]
+            'queries': [{
+                'query': query,
+                'result': jsonify_result(data, indent=4)
+            }]
         }
-    
-    print_text(get_bolded_text('> No intent found, fallback to GraphCypherQAChain'), 'blue', end='\n')
-    try:
-        msg: CypherChainOutput = await qachain.ainvoke(question)
-        return {
-            'snippet': msg['result'],
-            'queries': [m['query'] for m in msg['intermediate_steps'] if 'query' in m]
-        }
-    except ValueError:
-        return None
-
 
 async def _search(request: fastapi.Request, question: str):
     collection = await retrieval_strategy(request)

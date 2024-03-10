@@ -11,7 +11,12 @@
             "module": "ragnroll.main",
             "envFile": "${workspaceFolder}/.env",
             "args": ["serve", "--reload"],
-            "console": "integratedTerminal",
+            "console": "internalConsole",
+            "presentation": {
+                "hidden": true,
+                "group": "",
+                "order": 1
+            }
         }
     ]
 }

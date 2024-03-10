@@ -46,9 +46,14 @@ class SearchData(pydantic.BaseModel):
     match: str
     url: pydantic.AnyHttpUrl
 
+class SearchQueryMeta(pydantic.BaseModel):
+
+    query: str
+    result: str
+
 class SearchMeta(pydantic.BaseModel):
     snippet: typing.Optional[str]
-    queries: list[typing.Optional[str]]
+    queries: list[SearchQueryMeta]
 
 class SearchResult(pydantic.BaseModel):
     data: list[SearchData]
