@@ -90,7 +90,7 @@ class QueryCorrector(object):
             retry += 1
         return None
 
-async def _get_snippet(request: fastapi.Request, question:str):
+async def _get_snippet(request: fastapi.Request, question:str, result_limit: int = 50):
     collection = await retrieval_strategy(request)
     answer_chain = CYPHER_QA_PROMPT | collection.chat
     corrector_chain = prompt.cypher_corrector | collection.chat
@@ -121,8 +121,7 @@ async def _get_snippet(request: fastapi.Request, question:str):
     print(f'Generated query: {query}')
     query = await query_corrector(query)
     print(f'Corrected query: {query}')
-    # add object limit to 100
-    query = query + ' LIMIT 100 '
+    query = query + f' LIMIT {result_limit} '
     query = await query_corrector(query)
     print(f'Final query: {query}')
     async with driver.session() as session:
