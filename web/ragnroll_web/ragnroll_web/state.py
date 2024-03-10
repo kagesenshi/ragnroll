@@ -10,10 +10,64 @@ import traceback
 from . import log
 from . import settings
 import typing
+import asyncio
 
 class SnippetQuery(typing.TypedDict):
     query: str
     result: str
+
+class CRUD(rx.State):
+    prev_url: str
+    next_url: str
+    current_url: str
+    current_page: int
+    data: list[dict[str, typing.Any]] = []
+    columns: list[dict[str,str]] = []
+    reloading: bool = False
+
+class QuestionCRUD(CRUD):
+
+    async def dialog_on_open_change(self, is_open: bool):
+        if not is_open:
+            async for i in self.refresh():
+                yield i 
+ 
+    async def refresh(self):
+        self.reloading = True
+        if not self.current_url:
+            self.current_url = f'{settings.BACKEND_URI}/retrieval_question?page_size=10'
+        yield
+        self.columns = [{'name': 'id', 'title':'ID'}, {'name': 'question', 'title':'Question'}]
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(self.current_url)
+            data = response.json()
+            print(data)
+        self.data = [{'id': r['id'], 'question': r['properties']['question']} for r in data['data']]
+        self.current_page = data['meta']['current_page'] + 1
+        self.next_url = data['links'].get('next_page')
+        self.prev_url = data['links'].get('prev_page')
+        self.reloading = False
+        yield
+
+    async def enter_next_page(self):
+        self.current_url = self.next_url
+        async for i in self.refresh():
+            yield i
+
+    async def enter_prev_page(self):
+        self.current_url = self.prev_url
+        async for i in self.refresh():
+            yield i
+
+class QuestionCreateForm(rx.State):
+    
+    question: str
+
+    async def submit(self):
+        await asyncio.sleep(1) # wait for debounce
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(f'{settings.BACKEND_URI}/retrieval_question', json={'question': self.question})
+            data = response.json()
 
 class State(rx.State):
     """The app state."""
@@ -42,9 +96,12 @@ class State(rx.State):
     async def handle_submit(self):
         if self.searching:
             return 
+        yield rx.redirect('/')
         self.summary = None
         self.alert_message = None
         self.searching = True
+        self.snippet = None
+        self.snippet_queries = []
         yield
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -61,5 +118,4 @@ class State(rx.State):
             self.searching=False
             yield
 
-
-    
+Session = State

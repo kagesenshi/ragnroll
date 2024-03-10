@@ -38,22 +38,22 @@ async def session(request: fastapi.Request) -> neo4j.AsyncSession:
     driver: neo4j.AsyncDriver = connect(request)
     return driver.session()
 
-class RetrievalStrategy(Collection[model.RetrievalStrategy]):
+class RetrievalQuestion(Collection[model.RetrievalQuestion]):
     
     def __init__(self, session: neo4j.AsyncSession, chat: BaseChatModel, embeddings: Embeddings): 
         self.chat = chat
         self.embeddings = embeddings
-        return super().__init__(session, 'RetrievalStrategy', model.RetrievalStrategy)
+        return super().__init__(session, 'RetrievalQuestion', model.RetrievalQuestion)
     
-    async def match_question(self, query: str, count: int = 10, min_score=0) -> list[model.ScoredNode[model.RetrievalStrategy]]:
+    async def match_question(self, query: str, count: int = 10, min_score=0) -> list[model.ScoredNode[model.RetrievalQuestion]]:
         await self.session.execute_write(self._create_vector_index)
         return await self.session.execute_read(self._match_question, query, count = count, min_score = min_score)
     
-    async def create(self, item: model.RetrievalStrategy):
+    async def create(self, item: model.RetrievalQuestion):
         item.embedding = await self.embeddings.aembed_query(item.question)
         return await super().create(item)
     
-    async def update(self, node_id: int, item: model.RetrievalStrategy) -> model.Node[model.RetrievalStrategy]:
+    async def update(self, node_id: int, item: model.RetrievalQuestion) -> model.Node[model.RetrievalQuestion]:
         item.embedding = await self.embeddings.aembed_query(item.question)
         return await super().update(node_id, item)
 
@@ -71,7 +71,7 @@ class RetrievalStrategy(Collection[model.RetrievalStrategy]):
         res = await txn.run(cypher, parameters={})
         return None
     
-    async def _match_question(self, txn: neo4j.AsyncTransaction, query: str, count: int =10, min_score: int=0) -> model.ScoredNode[model.RetrievalStrategy]:
+    async def _match_question(self, txn: neo4j.AsyncTransaction, query: str, count: int =10, min_score: int=0) -> model.ScoredNode[model.RetrievalQuestion]:
         embedding = await self.embeddings.aembed_query(query)
         cypher = '''
         CALL db.index.vector.queryNodes('questions_embedding', $count, $embedding)

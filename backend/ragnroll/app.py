@@ -54,19 +54,20 @@ class Neo4jJSONEncoder(json.JSONEncoder):
 def jsonify_result(data: typing.Any, **kwargs):
     return json.dumps(data, cls=Neo4jJSONEncoder, **kwargs)
 
-async def retrieval_strategy(request: fastapi.Request) -> db.RetrievalStrategy:
+async def retrieval_question(request: fastapi.Request) -> db.RetrievalQuestion:
     session = await db.session(request)
     chat = ChatOpenAI()
     embedding = OpenAIEmbeddings()
-    collection = db.RetrievalStrategy(session, chat, embedding)
+    collection = db.RetrievalQuestion(session, chat, embedding)
     return collection
    
-async def retrieval_strategy_view(request: fastapi.Request):
-    collection = await retrieval_strategy(request)
-    view = CollectionView[model.RetrievalStrategy](request, collection, 
-                          'list_retrieval_strategy', 
-                          'create_retrieval_strategy', 'read_retrieval_strategy',
-                          'update_retrieval_strategy', 'delete_retrieval_strategy')
+
+async def retrieval_question_view(request: fastapi.Request):
+    collection = await retrieval_question(request)
+    view = CollectionView[model.RetrievalQuestion](request, collection, 
+                          'list_retrieval_question', 
+                          'create_retrieval_question', 'read_retrieval_question',
+                          'update_retrieval_question', 'delete_retrieval_question')
     return view
 
 class QueryCorrector(object):
@@ -91,7 +92,7 @@ class QueryCorrector(object):
         return None
 
 async def _get_snippet(request: fastapi.Request, question:str, result_limit: int = 50):
-    collection = await retrieval_strategy(request)
+    collection = await retrieval_question(request)
     answer_chain = CYPHER_QA_PROMPT | collection.chat
     corrector_chain = prompt.cypher_corrector | collection.chat
     generator_chain = CYPHER_GENERATION_PROMPT | collection.chat
@@ -137,7 +138,7 @@ async def _get_snippet(request: fastapi.Request, question:str, result_limit: int
         }
 
 async def _search(request: fastapi.Request, question: str):
-    collection = await retrieval_strategy(request)
+    collection = await retrieval_question(request)
 
     entity_chain = prompt.entity_identifier | collection.chat
     driver: neo4j.AsyncDriver = db.connect(request)
@@ -176,30 +177,30 @@ async def post_search(request: fastapi.Request, payload: model.SearchParam) -> m
     return await _search(request, payload.question)
 
 # RAG Training Data
-@app.post("/retrieval_strategy", name='create_retrieval_strategy')
-async def create_retrieval_strategy(request: fastapi.Request, payload: model.RetrievalStrategy) -> model.Message:
-    view = await retrieval_strategy_view(request) 
+@app.post("/retrieval_question", name='create_retrieval_question')
+async def create_retrieval_question(request: fastapi.Request, payload: model.RetrievalQuestion) -> model.Message:
+    view = await retrieval_question_view(request) 
     return await view.create(payload)
 
-@app.get("/retrieval_strategy", name='list_retrieval_strategy', response_model_exclude_none=True, response_model_exclude={'data': {'__all__': {'properties': {'embedding'}}}})
-async def list_retrieval_strategy(request: fastapi.Request, page:int =0, page_size: int=100) -> model.ItemList[model.NodeItem[model.RetrievalStrategy]]:
-    view = await retrieval_strategy_view(request)
+@app.get("/retrieval_question", name='list_retrieval_question', response_model_exclude_none=True, response_model_exclude={'data': {'__all__': {'properties': {'embedding'}}}})
+async def list_retrieval_question(request: fastapi.Request, page:int =0, page_size: int=100) -> model.ItemList[model.NodeItem[model.RetrievalQuestion]]:
+    view = await retrieval_question_view(request)
     res= await view.list_all(page, page_size)
     return res
 
-@app.get("/retrieval_strategy/{entry_id}", name='read_retrieval_strategy', response_model_exclude={'properties': {'embedding'}, 'score': True})
-async def get_retrieval_strategy(request: fastapi.Request, entry_id: int) -> model.NodeItem[model.RetrievalStrategy]:
-    view = await retrieval_strategy_view(request)
+@app.get("/retrieval_question/{entry_id}", name='read_retrieval_question', response_model_exclude={'properties': {'embedding'}, 'score': True})
+async def get_retrieval_question(request: fastapi.Request, entry_id: int) -> model.NodeItem[model.RetrievalQuestion]:
+    view = await retrieval_question_view(request)
     return await view.get(entry_id)
 
-@app.put("/retrieval_strategy/{entry_id}", name='update_retrieval_strategy')
-async def update_retrieval_strategy(request: fastapi.Request, entry_id: int, payload: model.RetrievalStrategy) -> model.NodeItem[model.RetrievalStrategy]:
-    view = await retrieval_strategy_view(request)
+@app.put("/retrieval_question/{entry_id}", name='update_retrieval_question')
+async def update_retrieval_question(request: fastapi.Request, entry_id: int, payload: model.RetrievalQuestion) -> model.NodeItem[model.RetrievalQuestion]:
+    view = await retrieval_question_view(request)
     return await view.update(entry_id, payload)
 
-@app.delete("/retrieval_strategy/{entry_id}", name='delete_retrieval_strategy')
-async def delete_retrieval_strategy(request: fastapi.Request, entry_id: int) -> model.Message:
-    view = await retrieval_strategy_view(request)
+@app.delete("/retrieval_question/{entry_id}", name='delete_retrieval_question')
+async def delete_retrieval_question(request: fastapi.Request, entry_id: int) -> model.Message:
+    view = await retrieval_question_view(request)
     return await view.delete(entry_id)
 
 ## Document Management

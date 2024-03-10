@@ -4,22 +4,6 @@ import asyncio
 
 from ragnroll_web.state import State
 
-
-def box_style() -> dict:
-    return {
-        # "bg": "rgb(250, 250, 250)",
-        "bg": "white",
-        "border_radius": "15px",
-        "border_color": "lightgrey",
-        "border_width": "thin",
-        "padding": 5,
-        "style": {
-            "boxShadow": "0px 0px 4px rgba(0, 0, 0, 0.1)",
-        },
-        "width": "620px",
-    }
-
-
 def featuredSnippet() -> rx.Component:
     accordion = rx.accordion.root(
         rx.foreach(
