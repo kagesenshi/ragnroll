@@ -2,5 +2,5 @@
 *.py[cod]
 **/.web/
 **/__pycache__/
-.devcontainer/neo4j-data/
+
 .env

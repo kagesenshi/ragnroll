@@ -8,4 +8,7 @@ lib/
 !lib/README.md
 .DS_Store
 .devcontainer/neo4j-data
+.devcontainer/neo4j-data/
+.devcontainer/neo4j-logs/
+.devcontainer/neo4j-import/
 **/.venv

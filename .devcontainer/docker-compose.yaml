@@ -18,7 +18,7 @@ services:
       - 3000:3000
   neo4j:
     userns_mode: keep-id:uid=7474,gid=7474
-    image: docker.io/neo4j:5.16.0-enterprise-ubi8
+    image: docker.io/neo4j:5.18.0-community-ubi9
     environment:
       - NEO4J_apoc_export_file_enabled=true
       - NEO4J_apoc_import_file_enabled=true
@@ -31,5 +31,7 @@ services:
       - 7687:7687
     volumes:
       - ./neo4j-data:/data
+      - ./neo4j-import:/var/lib/neo4j/import
+      - ./neo4j-logs:/logs
     tmpfs:
       - /var/lib/neo4j/run/
