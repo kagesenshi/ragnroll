@@ -2,6 +2,7 @@ import pydantic
 import enum
 import typing
 from .crud.model import *
+from .crud.view import NodeCollectionEndpoints
 
 class QueryType(enum.StrEnum):
    CYPHER = 'cypher'
@@ -18,6 +19,7 @@ class RetrievalQuery(pydantic.BaseModel):
     query: str
     query_type: QueryType = 'cypher'
     visualization: VisualizationType = 'text-answer'
+
 
 class Document(pydantic.BaseModel):
     title: typing.Optional[str]

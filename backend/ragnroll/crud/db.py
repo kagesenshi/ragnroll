@@ -13,8 +13,13 @@ def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
         if settings.NEO4J_SSL_CA_CERT:
             params['trusted_certificates'] = neo4j.TrustCustomCAs(settings.NEO4J_SSL_CA_CERT)
 
-    auth_header = request.headers.get('Authorization', default=None)
-    if settings.NEO4J_USE_BEARER_TOKEN and auth_header and auth_header.lower().startswith('bearer'):
+    auth_header = None
+    if request is not None:
+        auth_header = request.headers.get('Authorization', default=None)
+
+    if request is None:
+        params['auth'] = (settings.NEO4J_USERNAME, settings.NEO4J_PASSWORD)
+    elif settings.NEO4J_USE_BEARER_TOKEN and auth_header and auth_header.lower().startswith('bearer'):
         params['auth'] = neo4j.bearer_auth(auth_header.split(' ')[1])
     else:
         if settings.NEO4J_USERNAME and settings.NEO4J_PASSWORD:
@@ -24,3 +29,5 @@ def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
 
     return neo4j.AsyncGraphDatabase.driver(**params)
 
+async def session(request: fastapi.Request) -> neo4j.AsyncSession:
+    return connect(request).session()
