@@ -35,8 +35,8 @@ class ItemListLinks(pydantic.BaseModel):
 
 class ItemList(pydantic.BaseModel, typing.Generic[N]):
     data: list[N]
-    meta: ItemListMeta
-    links: ItemListLinks
+    meta: typing.Optional[ItemListMeta] = None
+    links: typing.Optional[ItemListLinks] = None
 
 class SearchParam(pydantic.BaseModel):
     question: str
@@ -63,3 +63,5 @@ class Message(pydantic.BaseModel):
     msg: typing.Optional[str]
 
 
+class NodeID(pydantic.BaseModel):
+    node_id: int

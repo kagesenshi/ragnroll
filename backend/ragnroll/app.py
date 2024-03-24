@@ -1,14 +1,13 @@
 import fastapi
 import pydantic 
 from . import model
-from . import db
+from .crud import db
 import neo4j
 import neo4j.exceptions
 import typing
 import urllib.parse
 from . import prompt
 from .crud.view import NodeCollectionView
-from .view import RetrievalQueryEndpoints, retrieval_query_factory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages.base import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -77,13 +76,14 @@ class QueryCorrector(object):
         return None
 
 async def _get_snippet(request: fastapi.Request, question:str, result_limit: int = 50):
-    collection = await retrieval_query_factory(request)
-    answer_chain = CYPHER_QA_PROMPT | collection.chat
-    corrector_chain = prompt.cypher_corrector | collection.chat
-    generator_chain = CYPHER_GENERATION_PROMPT | collection.chat
+    collection = await model.RetrievalQueryEndpoints.factory(request)
+    chat = ChatOpenAI()
+    answer_chain = CYPHER_QA_PROMPT | chat 
+    corrector_chain = prompt.cypher_corrector | chat
+    generator_chain = CYPHER_GENERATION_PROMPT | chat
     driver: neo4j.AsyncDriver = db.connect(request)
     query_corrector = QueryCorrector(driver, corrector_chain)
-    qachain = GraphCypherQAChain.from_llm(collection.chat, graph=Neo4jGraph(), verbose=True, return_intermediate_steps=True, 
+    qachain = GraphCypherQAChain.from_llm(chat, graph=Neo4jGraph(), verbose=True, return_intermediate_steps=True, 
         validate_cypher=True)
     query = None 
     matches = await collection.match_question(question, min_score=0.9)
@@ -123,9 +123,9 @@ async def _get_snippet(request: fastapi.Request, question:str, result_limit: int
         }
 
 async def _search(request: fastapi.Request, question: str):
-    collection = await retrieval_query_factory(request)
-
-    entity_chain = prompt.entity_identifier | collection.chat
+    collection = await model.RetrievalQueryEndpoints.factory(request)
+    chat = ChatOpenAI()
+    entity_chain = prompt.entity_identifier | chat
     driver: neo4j.AsyncDriver = db.connect(request)
 
     async with driver.session() as session:
@@ -160,4 +160,65 @@ async def post_search(request: fastapi.Request, payload: model.SearchParam) -> m
     return await _search(request, payload.question)
 
 # RAG Training Data: Query
-RetrievalQueryEndpoints.register_views(app)
+model.RetrievalQueryEndpoints.register_views(app)
+
+@app.post('/retrieval_query/{identifier}/question/')
+async def add_question(request: fastapi.Request, identifier: int, question_id: model.NodeID) -> model.Message:
+        node_id = identifier
+        session: neo4j.AsyncSession = await db.session(request)
+        async def _job(txn: neo4j.AsyncTransaction):
+            params = {'__node_id': node_id,
+                      'question_id': question_id.node_id}
+            cypher = '''
+            MATCH (query:RetrievalQuery) WHERE id(query) = $__node_id
+            MATCH (question:RetrievalQuestion) WHERE id(question) = $question_id
+            MERGE (query)-[:ANSWERS]->(question)
+            '''
+            res = await txn.run(cypher, parameters=params)
+            return model.Message(msg='Success')
+        return await session.execute_write(_job)
+
+@app.get('/retrieval_query/{identifier}/question', response_model_exclude_none=True)
+async def get_questions(request: fastapi.Request, identifier: int) -> model.ItemList[model.NodeItem[model.RetrievalQuestion]]:
+    node_id = identifier
+    session = await db.session(request)
+    async def _job(txn: neo4j.AsyncTransaction):
+        params = {
+            '__node_id': node_id
+        }
+        query = '''
+        MATCH (query:RetrievalQuery)-[:ANSWERS]-(question:RetrievalQuestion) 
+        WHERE id(query) = $__node_id
+        RETURN distinct id(question) as identifier, labels(question) as node_labels, question as node
+        '''
+        res = await txn.run(query=query, parameters=params)
+        data = await res.data()
+        return model.ItemList[model.NodeItem[model.RetrievalQuestion]](data=[
+            model.NodeItem[model.RetrievalQuestion](
+                id=r['identifier'], 
+                labels=r['node_labels'], 
+                properties=model.RetrievalQuestion(question=r['node']['question']),
+                links=model.ItemLinks(self=str(request.url_for('read_retrieval_question', identifier=r['identifier'])))
+            ) for r in data
+            ])
+    return await session.execute_read(_job)
+
+model.RetrievalQuestionEndpoints.register_views(app)
+#
+#    async def match_question(self, txn: neo4j.AsyncTransaction, query: str, count: int =10, min_score: int=0) -> list[model.ScoredNode[model.RetrievalQuestion]]:
+#        async def _job(txn: neo4j.AsyncTransaction):
+#           embedding = await self.embeddings.aembed_query(query)
+#           cypher = '''
+#           CALL db.index.vector.queryNodes('questions_embedding', $count, $embedding)
+#           YIELD node, score
+#           WITH node, score
+#               WHERE $label in labels(node)
+#               AND score > $min_score
+#           RETURN id(node) as identifier, node, labels(node) as node_labels, score
+#           ''' 
+#           res = await txn.run(cypher, parameters={'label': self.label, 'embedding': embedding, 'count': count, 'min_score': min_score})
+#           return [model.ScoredNode[self.schema](id=r['identifier'], properties=r['node'], labels=r['node_labels'], score=r['score']) for r in await res.data()]
+#        return self.session.execute_read(_job)
+#    
+#
+

@@ -1,8 +1,11 @@
 import pydantic
 import enum
 import typing
+import neo4j
 from .crud.model import *
+from .crud.collection import NodeCollection
 from .crud.view import NodeCollectionEndpoints
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 class QueryType(enum.StrEnum):
    CYPHER = 'cypher'
@@ -13,7 +16,6 @@ class VisualizationType(enum.StrEnum):
 
 class RetrievalQuestion(pydantic.BaseModel):
     question: str
-    embedding: typing.Optional[list[float]] = None
 
 class RetrievalQuery(pydantic.BaseModel):
     query: str
@@ -29,3 +31,18 @@ class Document(pydantic.BaseModel):
     file_type: str
     file_checksum: str
 
+async def enrich_embedding(txn: neo4j.AsyncTransaction, collection: NodeCollection[RetrievalQuestion], node_id: int, item: RetrievalQuestion):
+    embeddings = OpenAIEmbeddings()
+    embedding = await embeddings.aembed_query(item.question)
+    await txn.run('''
+    MATCH (question:RetrievalQuestion) WHERE id(question) = $__node_id
+    SET question.embedding = $embedding
+    ''', parameters={
+        '__node_id': node_id,
+        'embedding': embedding
+    })
+
+RetrievalQueryEndpoints = NodeCollectionEndpoints('retrieval_query', 'RetrievalQuery', RetrievalQuery)
+RetrievalQuestionEndpoints = NodeCollectionEndpoints('retrieval_question', 'RetrievalQuestion', RetrievalQuestion, 
+                                                     after_update=enrich_embedding, 
+                                                     after_create=enrich_embedding)

@@ -32,9 +32,26 @@ class Collection(abc.ABC, typing.Generic[T]):
     
 class NodeCollection(Collection[S]):
 
-    def __init__(self, session: neo4j.AsyncSession, label: str, schema: type[S]):
+    def __init__(self, session: neo4j.AsyncSession, label: str, schema: type[S],
+                 before_create: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, 'NodeCollection[S]', S], typing.Awaitable[None]]] = None, 
+                 after_create: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, 'NodeCollection[S]', int, S], typing.Awaitable[None]]] = None,
+                 before_update: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, 'NodeCollection[S]', int, S], typing.Awaitable[None]]] = None,
+                 after_update: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, 'NodeCollection[S]', int, S], typing.Awaitable[None]]] = None,
+                 before_delete: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, 'NodeCollection[S]', int], typing.Awaitable[None]]] = None,
+                 after_delete: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, 'NodeCollection[S]', int], typing.Awaitable[None]]] = None,
+                 transform_nodes: typing.Optional[typing.Callable[[neo4j.AsyncTransaction, list[model.Node[S]]], typing.Awaitable[list[model.Node[S]]]]] = None
+                 ):
         self.label = label
         self.schema = schema
+        self.callbacks = {
+            'before_create': before_create,
+            'after_create': after_create,
+            'before_update': before_update,
+            'after_update': after_update,
+            'before_delete': before_delete,
+            'after_delete': after_delete,
+            'transform_nodes': transform_nodes
+        }
         super().__init__(session)
 
     @property
@@ -60,7 +77,12 @@ class NodeCollection(Collection[S]):
 
     async def create(self, item: S) -> bool:
         async def _job(txn: neo4j.AsyncTransaction):
+            if self.callbacks['before_create']:
+                await self.callbacks['before_create'](txn, self, item)
             res = await txn.run(self.create_query, parameters=item.model_dump())
+            if self.callbacks['after_create']:
+                node_id = res.single()['identifier']
+                await self.callbacks['after_create'](txn, self, node_id, item)
             return True
         return await self.session.execute_write(_job)
     
@@ -68,9 +90,16 @@ class NodeCollection(Collection[S]):
         async def _job(txn: neo4j.AsyncTransaction):
             params = item.model_dump()
             params['__node_id'] = node_id
+            if self.callbacks['before_update']:
+                await self.callbacks['before_update'](txn, self, node_id, item)
             res = await txn.run(self.update_query, parameters=params)
+            if self.callbacks['after_update']:
+                await self.callbacks['after_update'](txn, self, node_id, item)
             record = await res.single()
-            return model.Node[self.schema](id=record['identifier'], properties=record['n'], labels=record['node_labels'])           
+            node = model.Node[self.schema](id=record['identifier'], properties=record['n'], labels=record['node_labels'])
+            if self.callbacks['transform_nodes']:
+                return self.callbacks['transform_nodes'](txn, [node])[0]
+            return node
         return await self.session.execute_write(_job)
     
     async def list_all(self, limit=100, offset=0) -> list[model.Node[S]]:
@@ -82,7 +111,10 @@ class NodeCollection(Collection[S]):
                 LIMIT $limit
             ''' % self.label
             res = await txn.run(query, parameters={'limit': limit, 'offset': offset})
-            return [model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels']) for r in await res.data()]
+            nodes = [model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels']) for r in await res.data()]
+            if self.callbacks['transform_nodes']:
+                return self.callbacks['transform_nodes'](txn, nodes)
+            return nodes
         return await self.session.execute_read(_job)
     
     async def get(self, node_id) -> model.Node[S]:
@@ -95,7 +127,10 @@ class NodeCollection(Collection[S]):
             res = await txn.run(query, parameters={'__node_id': node_id})
             r = await res.single()
             if r:
-                return model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels'])
+                node = model.Node[self.schema](id=r['identifier'], properties=r['n'], labels=r['node_labels'])
+                if self.callbacks['transform_nodes']:
+                    return self.callbacks['transform_nodes'](txn, [node])[0]
+                return node
             return None
         return await self.session.execute_read(_job)
 
