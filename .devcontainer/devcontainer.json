@@ -13,7 +13,8 @@
 				"eridem.vscode-postman",
 				"humao.rest-client",
 				"ms-python.python",
-				"jebbs.plantuml"
+				"jebbs.plantuml",
+				"ms-python.black-formatter"
 			]
 		}
 	},

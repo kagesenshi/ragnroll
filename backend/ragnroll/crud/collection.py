@@ -61,6 +61,7 @@ class NodeCollection(Collection[S]):
             fields.append(f'{name}: ${name}')
         return '''
             CREATE (n:%s {%s})
+            RETURN id(n) as identifier, n, labels(n) as node_labels
         ''' % (self.label, ',\n'.join(fields))
     
     @property
@@ -75,15 +76,16 @@ class NodeCollection(Collection[S]):
             RETURN id(n) as identifier, n, labels(n) as node_labels
         ''' % (self.label, ',\n'.join(fields))
 
-    async def create(self, item: S) -> bool:
+    async def create(self, item: S) -> model.Node[S]:
         async def _job(txn: neo4j.AsyncTransaction):
             if self.callbacks['before_create']:
                 await self.callbacks['before_create'](txn, self, item)
             res = await txn.run(self.create_query, parameters=item.model_dump())
+            record = await res.single()
             if self.callbacks['after_create']:
-                node_id = res.single()['identifier']
+                node_id = record['identifier']
                 await self.callbacks['after_create'](txn, self, node_id, item)
-            return True
+            return model.Node[self.schema](id=record['identifier'], properties=record['n'], labels=record['node_labels'])
         return await self.session.execute_write(_job)
     
     async def update(self, node_id: int, item: S) -> model.Node[S]:

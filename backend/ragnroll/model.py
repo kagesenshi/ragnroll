@@ -42,7 +42,17 @@ async def enrich_embedding(txn: neo4j.AsyncTransaction, collection: NodeCollecti
         'embedding': embedding
     })
 
+async def cascade_delete(txn: neo4j.AsyncTransaction, collection: NodeCollection[RetrievalQuestion], node_id: int):
+    await txn.run('''
+    MATCH (q:RetrievalQuestion)-[:ANSWERS]-(qr:RetrievalQuery)           
+    WHERE id(qr) = $query_id
+    DETACH DELETE q
+    ''', parameters={
+        'query_id': node_id
+    })
+
 RetrievalQueryEndpoints = NodeCollectionEndpoints('retrieval_query', 'RetrievalQuery', RetrievalQuery)
 RetrievalQuestionEndpoints = NodeCollectionEndpoints('retrieval_question', 'RetrievalQuestion', RetrievalQuestion, 
                                                      after_update=enrich_embedding, 
-                                                     after_create=enrich_embedding)
+                                                     after_create=enrich_embedding,
+                                                     before_delete=cascade_delete)

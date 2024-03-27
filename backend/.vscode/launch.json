@@ -12,6 +12,7 @@
             "envFile": "${workspaceFolder}/.env",
             "args": ["serve", "--reload", "-l","0.0.0.0"],
             "console": "internalConsole",
+            "subProcess": false,
             "presentation": {
                 "hidden": true,
                 "group": "",

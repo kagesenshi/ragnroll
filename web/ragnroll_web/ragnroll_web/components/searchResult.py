@@ -2,7 +2,6 @@ import reflex as rx
 
 from ragnroll_web.state import State
 from typing import Dict
-from .util import spinner
 
 def box_style() -> dict:
     return{

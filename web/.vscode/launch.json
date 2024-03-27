@@ -13,6 +13,7 @@
             "args": ["run"],
             "console": "internalConsole",
             "cwd": "${workspaceFolder}/ragnroll_web/",
+            "subProcess": false,
             "presentation": {
                 "hidden": true,
                 "group": "",

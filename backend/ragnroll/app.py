@@ -76,23 +76,49 @@ class QueryCorrector(object):
         return None
 
 async def _get_snippet(request: fastapi.Request, question:str, result_limit: int = 50):
+    print_text(get_bolded_text(f"> Answering question: {question}"), end='\n')
     collection = await model.RetrievalQueryEndpoints.factory(request)
+
     chat = ChatOpenAI()
+    embeddings = OpenAIEmbeddings()
     answer_chain = CYPHER_QA_PROMPT | chat 
     corrector_chain = prompt.cypher_corrector | chat
     generator_chain = CYPHER_GENERATION_PROMPT | chat
     driver: neo4j.AsyncDriver = db.connect(request)
+    session: neo4j.AsyncSession = driver.session()
+
     query_corrector = QueryCorrector(driver, corrector_chain)
     qachain = GraphCypherQAChain.from_llm(chat, graph=Neo4jGraph(), verbose=True, return_intermediate_steps=True, 
         validate_cypher=True)
-    query = None 
-    matches = await collection.match_question(question, min_score=0.9)
-    matches = [{'question': m.properties.question, 'query': m.properties.query, 'score': m.score} for m in matches]
+
+    async def _job(txn: neo4j.AsyncTransaction):
+        print_text(get_bolded_text("> Entering embedding calculation"), end='\n')
+        embedding = await embeddings.aembed_query(question)
+        print_text(get_bolded_text("> Embedding done"), end='\n')
+        count = 5
+        min_score = 0.9
+        cypher = '''
+            CALL db.index.vector.queryNodes('questions_embedding', $count, $embedding)
+            YIELD node, score
+            WITH node, score
+               WHERE 'RetrievalQuestion' in labels(node)
+               AND score > $min_score
+            MATCH (query:RetrievalQuery)-[:ANSWERS]-(node)
+            RETURN distinct query, node as question, score
+           ''' 
+        res = await txn.run(cypher, parameters={'embedding': embedding, 'count': count, 'min_score': min_score})
+        return await res.data()
+    
+    matches = await session.execute_read(_job)
+    matches = [{'question': m['query']['query'], 
+                'query': m['question']['question'],
+                'score': m['score']} for m in matches]
+    print(matches)
+    query = None
     driver: neo4j.AsyncDriver = db.connect(request)
     if len(matches):
         print_text(get_bolded_text("> Entering intent matcher"), end='\n')
-        chain = prompt.rag_query_generator | collection.chat 
-
+        chain = prompt.rag_query_generator | chat 
         print(matches)
         message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
                 f"Question: {match['question']}\nQuery: {match['query']}" for match in matches
@@ -102,6 +128,7 @@ async def _get_snippet(request: fastapi.Request, question:str, result_limit: int
             query = await query_corrector(query)
 
     if not query:
+        print_text(get_bolded_text("> Entering generator chain"), end='\n')
         query_msg: BaseMessage = await generator_chain.ainvoke({'question': question, 'schema': construct_schema(Neo4jGraph().get_structured_schema, [], [])})
         query = query_msg.content
     print(f'Generated query: {query}')
@@ -162,7 +189,7 @@ async def post_search(request: fastapi.Request, payload: model.SearchParam) -> m
 # RAG Training Data: Query
 model.RetrievalQueryEndpoints.register_views(app)
 
-@app.post('/retrieval_query/{identifier}/question/')
+@app.post('/retrieval_query/{identifier}/question')
 async def add_question(request: fastapi.Request, identifier: int, question_id: model.NodeID) -> model.Message:
         node_id = identifier
         session: neo4j.AsyncSession = await db.session(request)
@@ -205,20 +232,7 @@ async def get_questions(request: fastapi.Request, identifier: int) -> model.Item
 
 model.RetrievalQuestionEndpoints.register_views(app)
 #
-#    async def match_question(self, txn: neo4j.AsyncTransaction, query: str, count: int =10, min_score: int=0) -> list[model.ScoredNode[model.RetrievalQuestion]]:
-#        async def _job(txn: neo4j.AsyncTransaction):
-#           embedding = await self.embeddings.aembed_query(query)
-#           cypher = '''
-#           CALL db.index.vector.queryNodes('questions_embedding', $count, $embedding)
-#           YIELD node, score
-#           WITH node, score
-#               WHERE $label in labels(node)
-#               AND score > $min_score
-#           RETURN id(node) as identifier, node, labels(node) as node_labels, score
-#           ''' 
-#           res = await txn.run(cypher, parameters={'label': self.label, 'embedding': embedding, 'count': count, 'min_score': min_score})
-#           return [model.ScoredNode[self.schema](id=r['identifier'], properties=r['node'], labels=r['node_labels'], score=r['score']) for r in await res.data()]
-#        return self.session.execute_read(_job)
+
 #    
 #
 

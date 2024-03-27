@@ -55,7 +55,7 @@ class NodeCollectionEndpoints(typing.Generic[S]):
     
     def register_views(self, app):
         @app.post(f"/{self.name}", name=self.create_endpoint)
-        async def create(request: fastapi.Request, payload: self.schema) -> model.Message:
+        async def create(request: fastapi.Request, payload: self.schema) -> model.NodeItem[self.schema]:
             view = await self.view_factory(request) 
             return await view.create(payload)
         
@@ -92,9 +92,12 @@ class NodeCollectionView(typing.Generic[S]):
         self.update_endpoint = endpoints.update_endpoint
         self.delete_endpoint = endpoints.delete_endpoint
 
-    async def create(self, payload: S) -> model.Message:
-        await self.col.create(payload)
-        return model.Message(msg='success')
+    async def create(self, payload: S) -> model.NodeItem[S]:
+        record = await self.col.create(payload)
+        data = record.model_dump()
+        data['links'] = model.ItemLinks(self=pydantic.HttpUrl(str(self.request.url_for(self.read_endpoint, 
+                                                                      identifier=record.id))))
+        return model.NodeItem[self.col.schema](**data)
     
     async def get(self, identifier: int) -> model.NodeItem[S]:
         record = await self.col.get(identifier)

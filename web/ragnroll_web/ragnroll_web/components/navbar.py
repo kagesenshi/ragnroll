@@ -3,25 +3,26 @@ import reflex as rx
 from ragnroll_web.state import State
 
 def navbar() -> rx.Component:
-    return rx.box(
-        rx.hstack(
+    return rx.hstack(
             rx.drawer.root(
                 rx.drawer.trigger(
-                    rx.chakra.icon(
-                        tag="hamburger",
-                        width="1.5em",
-                        height="1.5em",
-                        _hover={"cursor": "pointer"},
-                        display="flex",
-                        mr=3,
-                    ),
+                    rx.button(rx.icon(
+                        tag="menu",
+                        size=32,
+                    ), 
+                    padding="8px",
+                    margin_left="1em",
+                    variant='ghost')
                 ),
                 rx.drawer.overlay(),
                 rx.drawer.portal(
                     rx.drawer.content(
                         rx.unordered_list(
                             rx.list_item(
-                                rx.link(rx.text("Train QA"), href='/train')
+                                rx.link(rx.text('Search'), href='/')
+                            ),
+                            rx.list_item(
+                                rx.link(rx.text("Retrieval Queries"), href='/retrieval_query')
                             ),
                             list_style_type='none'
                         ),
@@ -35,46 +36,41 @@ def navbar() -> rx.Component:
                 ),
                 direction="left",
             ),
-            rx.box(
-                rx.center(
-                    rx.chakra.input(
-                        flex=4,
-                        placeholder="Search here...",
-                        id="search_input",
-                        on_change=State.set_query,
-                        on_key_down=State.handle_enter,
-                    ),
-                    rx.chakra.button(
-                        rx.chakra.icon(tag="search2"),
-                        width="45%",
-                        flex=0.5,
-                        on_click=State.handle_submit,
-                    ),
+            rx.spacer(),
+            rx.menu.root(
+                rx.menu.trigger(
+                    rx.button(
+                        rx.icon(tag="bell", size=32), 
+                        variant="ghost",
+                        padding="8px",
+                        margin_left="1em",
+                        margin_right="1em"
+                    ),                   
                 ),
-                flex=12,
+                rx.menu.content(
+                    rx.menu.item("notification")
+                )
             ),
-            rx.hstack(
-                rx.chakra.button(rx.chakra.icon(tag="bell"), variant="ghost"),
-                rx.chakra.menu(
-                    rx.chakra.menu_button(rx.chakra.avatar(name="John Doe", size="sm")),
-                    rx.chakra.menu_list(
-                        rx.chakra.menu_item("My profile"),
-                        rx.chakra.menu_divider(),
-                        rx.chakra.menu_item("Settings"),
-                        rx.chakra.menu_item("Help"),
-                    ),
+            rx.menu.root(
+                rx.menu.trigger(
+                    rx.button(
+                        rx.avatar(fallback="JD"),
+                        variant='ghost',
+                        margin_right="1em"
+                    )
                 ),
-                align_items="center",
+                rx.menu.content(
+                    rx.menu.item("My Profile"),
+                    rx.menu.separator(),
+                    rx.menu.item("Settings"),
+                    rx.menu.item("Help")
+                )
             ),
-            align_items="center",
-        ),
-        bg="rgba(255,255,255, 0.9)",
-        backdrop_filter="blue(10px)",
-        padding_y=["0.8em", "0.8em", "0.5em"],
-        border_bottom="1px solid #F4F3F6",
-        width="100%",
-        position="sticky",
-        z_index="999",
-        top="0",
-        id="navbar",
+            border_bottom="1px solid #F4F3F6",
+            position="sticky",
+            z_index="2",
+            top="0",
+            width="100%",
+            padding_y=["0.8em", "0.8em", "0.5em"],
+            id="navbar",
     )

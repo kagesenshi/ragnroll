@@ -3,7 +3,9 @@ import typing
 from .. import state
 
 
-def crud_page(name: str, state: state.CRUD, create_form: rx.Component) -> rx.Component:
+def crud_page(name: str, state: rx.State, create_form: rx.Component, 
+              actions: typing.Callable[[dict, int], rx.Component] = lambda row, rowidx: rx.text(''), 
+              **extras) -> rx.Component:
     # this should return a table with an add button
     return rx.vstack(
         rx.hstack(
@@ -23,7 +25,8 @@ def crud_page(name: str, state: state.CRUD, create_form: rx.Component) -> rx.Com
                     rx.foreach(
                         state.columns,
                         lambda col, colidx: rx.table.column_header_cell(col["title"]),
-                    )
+                    ),
+                    rx.table.column_header_cell(rx.text('Actions'))
                 )
             ),
             rx.cond(
@@ -36,7 +39,8 @@ def crud_page(name: str, state: state.CRUD, create_form: rx.Component) -> rx.Com
                             rx.foreach(
                                 state.columns,
                                 lambda col, colidx: rx.table.cell(row[col["name"]]),
-                            )
+                            ),
+                            rx.table.cell(actions(row, rowidx))
                         ),
                     )
                 ),
@@ -51,4 +55,5 @@ def crud_page(name: str, state: state.CRUD, create_form: rx.Component) -> rx.Com
             align="end",
         ),
         width="100%",
+        **extras
     )
