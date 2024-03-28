@@ -13,15 +13,19 @@ class QueryType(enum.StrEnum):
 class VisualizationType(enum.StrEnum):
     TEXT_ANSWER = 'text-answer'
     BAR_CHART = 'bar-chart'
+    LINE_CHART = 'line-chart'
 
 class RAGQuestion(pydantic.BaseModel):
     question: str
+
+class RAGPattern(pydantic.BaseModel):
+    name: str
+    description: str
 
 class RAGQuery(pydantic.BaseModel):
     query: str
     query_type: QueryType = 'cypher'
     visualization: VisualizationType = 'text-answer'
-
 
 class Document(pydantic.BaseModel):
     title: typing.Optional[str]
@@ -51,6 +55,8 @@ async def cascade_delete(txn: neo4j.AsyncTransaction, collection: NodeCollection
         'query_id': node_id
     })
 
+
+RAGPatternEndpoints = NodeCollectionEndpoints('retrieval_pattern', '_RAGPattern', RAGPattern)
 RAGQueryEndpoints = NodeCollectionEndpoints('retrieval_query', '_RAGQuery', RAGQuery)
 RAGQuestionEndpoints = NodeCollectionEndpoints('retrieval_question', '_RAGQuestion', RAGQuestion, 
                                                      after_update=enrich_embedding, 

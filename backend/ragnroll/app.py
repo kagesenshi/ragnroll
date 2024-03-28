@@ -186,10 +186,7 @@ async def search(request: fastapi.Request, question: str) -> model.SearchResult:
 async def post_search(request: fastapi.Request, payload: model.SearchParam) -> model.SearchResult:
     return await _search(request, payload.question)
 
-# RAG Training Data: Query
-model.RAGQueryEndpoints.register_views(app)
-
-@app.post('/retrieval_query/{identifier}/question')
+@model.RAGQueryEndpoints.model_post('/question')
 async def add_question(request: fastapi.Request, identifier: int, question_id: model.NodeID) -> model.Message:
         node_id = identifier
         session: neo4j.AsyncSession = await db.session(request)
@@ -205,7 +202,7 @@ async def add_question(request: fastapi.Request, identifier: int, question_id: m
             return model.Message(msg='Success')
         return await session.execute_write(_job)
 
-@app.get('/retrieval_query/{identifier}/question', response_model_exclude_none=True)
+@model.RAGQueryEndpoints.model_get('/question', response_model_exclude_none=True)
 async def get_questions(request: fastapi.Request, identifier: int) -> model.ItemList[model.NodeItem[model.RAGQuestion]]:
     node_id = identifier
     session = await db.session(request)
@@ -230,9 +227,6 @@ async def get_questions(request: fastapi.Request, identifier: int) -> model.Item
             ])
     return await session.execute_read(_job)
 
+model.RAGPatternEndpoints.register_views(app)
 model.RAGQuestionEndpoints.register_views(app)
-#
-
-#    
-#
-
+model.RAGQueryEndpoints.register_views(app)

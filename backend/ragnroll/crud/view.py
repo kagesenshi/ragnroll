@@ -8,6 +8,7 @@ from . import model
 from . import db
 import abc
 import enum
+from functools import wraps
 
 S = typing.TypeVar("S", bound=pydantic.BaseModel) # Model Schema
 
@@ -44,6 +45,7 @@ class NodeCollectionEndpoints(typing.Generic[S]):
             'after_delete': after_delete,
             'transform_nodes': transform_nodes
         }
+        self._views = {}
 
     async def factory(self, request: fastapi.Request) -> NodeCollection:
         session = await db.session(request)
@@ -52,12 +54,131 @@ class NodeCollectionEndpoints(typing.Generic[S]):
     async def view_factory(self, request: fastapi.Request) -> 'NodeCollectionView':
         collection = await self.factory(request)
         return NodeCollectionView[self.schema](request, collection, self)
+
+    @wraps(fastapi.FastAPI.post)
+    def collection_post(self, path, **kwargs):
+        return self.post(f'/{self.name}{path}', **kwargs)
     
-    def register_views(self, app):
+    @wraps(fastapi.FastAPI.get)
+    def collection_get(self, path, **kwargs):
+        return self.get(f'/{self.name}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.patch)
+    def collection_patch(self, path, **kwargs):
+        return self.patch(f'/{self.name}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.put)
+    def collection_put(self, path, **kwargs):
+        return self.put(f'/{self.name}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.delete)
+    def collection_delete(self, path, **kwargs):
+        return self.delete(f'/{self.name}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.options)
+    def collection_options(self, path, **kwargs):
+        return self.options(f'/{self.name}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.post)
+    def model_post(self, path, **kwargs):
+        return self.post(f'/{self.name}/{{identifier}}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.get)
+    def model_get(self, path, **kwargs):
+        return self.get(f'/{self.name}/{{identifier}}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.patch)
+    def model_patch(self, path, **kwargs):
+        return self.patch(f'/{self.name}/{{identifier}}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.put)
+    def model_put(self, path, **kwargs):
+        return self.put(f'/{self.name}/{{identifier}}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.delete)
+    def model_delete(self, path, **kwargs):
+        return self.delete(f'/{self.name}/{{identifier}}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.options)
+    def model_options(self, path, **kwargs):
+        return self.options(f'/{self.name}/{{identifier}}{path}', **kwargs)
+
+    @wraps(fastapi.FastAPI.post)
+    def post(self, path, **kwargs):
+        def _wrapper(func):
+            self._views[(path, 'POST')] = {
+                'method': 'POST',
+                'path': path,
+                'params': kwargs,
+                'func': func 
+            }
+        return _wrapper
+
+    @wraps(fastapi.FastAPI.get)
+    def get(self, path, **kwargs):
+        def _wrapper(func):
+            self._views[(path, 'GET')] = {
+                'method': 'GET',
+                'path': path,
+                'params': kwargs,
+                'func': func 
+            }
+        return _wrapper
+
+    @wraps(fastapi.FastAPI.delete)
+    def delete(self, path, **kwargs):
+        def _wrapper(func):
+            self._views[(path, 'DELETE')] = {
+                'method': 'DELETE',
+                'path': path,
+                'params': kwargs,
+                'func': func 
+            }
+        return _wrapper
+
+    @wraps(fastapi.FastAPI.patch)
+    def patch(self, path, **kwargs):
+        def _wrapper(func):
+            self._views[(path, 'PATCH')] = {
+                'method': 'PATCH',
+                'path': path,
+                'params': kwargs,
+                'func': func 
+            }
+        return _wrapper
+
+    @wraps(fastapi.FastAPI.options)
+    def options(self, path, **kwargs):
+        def _wrapper(func):
+            self._views[(path, 'OPTIONS')] = {
+                'method': 'OPTIONS',
+                'path': path,
+                'params': kwargs,
+                'func': func 
+            }
+        return _wrapper
+
+    @wraps(fastapi.FastAPI.put)
+    def put(self, path, **kwargs):
+        def _wrapper(func):
+            self._put_views[(path, 'PUT')] = {
+                'method': 'PUT',
+                'path': path,
+                'params': kwargs,
+                'func': func 
+            }
+        return _wrapper
+
+    def register_views(self, app: type[fastapi.FastAPI]):
         @app.post(f"/{self.name}", name=self.create_endpoint)
         async def create(request: fastapi.Request, payload: self.schema) -> model.NodeItem[self.schema]:
             view = await self.view_factory(request) 
             return await view.create(payload)
+        
+        for (path, method), opts in self._views.items():
+            if method != 'POST':
+                continue
+            app.post(path, **opts['params'])(opts['func'])
         
         @app.get(f"/{self.name}", name=self.list_endpoint, response_model_exclude_none=True)
         async def list_all(request: fastapi.Request, page:int =0, page_size: int=100) -> model.ItemList[model.NodeItem[self.schema]]:
@@ -70,15 +191,37 @@ class NodeCollectionEndpoints(typing.Generic[S]):
             view = await self.view_factory(request)
             return await view.get(identifier)
         
+        for (path, method), opts in self._views.items():
+            if method != 'GET':
+                continue
+            app.get(path, **opts['params'])(opts['func'])
+        
         @app.put(f"/{self.name}/{{identifier}}", name=self.update_endpoint)
         async def update(request: fastapi.Request, identifier: int, payload: self.schema) -> model.NodeItem[self.schema]:
             view = await self.view_factory(request)
             return await view.update(identifier, payload)
         
+        for (path, method), opts in self._views.items():
+            if method != 'PUT':
+                continue
+            app.put(path, **opts['params'])(opts['func'])
+
+        for (path, method), opts in self._views.items():
+            if method != 'PATCH':
+                continue
+            app.patch(path, **opts['params'])(opts['func'])
+        
         @app.delete(f"/{self.name}/{{identifier}}", name=self.delete_endpoint)
         async def delete(request: fastapi.Request, identifier: int) -> model.Message:
             view = await self.view_factory(request)
             return await view.delete(identifier)
+        
+        for (path, method), opts in self._views.items():
+            if method != 'DELETE':
+                continue
+            app.delete(path, **opts['params'])(opts['func'])
+
+
 
 class NodeCollectionView(typing.Generic[S]):
 
