@@ -77,7 +77,7 @@ class QueryCorrector(object):
 
 async def _get_snippet(request: fastapi.Request, question:str, result_limit: int = 50):
     print_text(get_bolded_text(f"> Answering question: {question}"), end='\n')
-    collection = await model.RetrievalQueryEndpoints.factory(request)
+    collection = await model.RAGQueryEndpoints.factory(request)
 
     chat = ChatOpenAI()
     embeddings = OpenAIEmbeddings()
@@ -98,12 +98,12 @@ async def _get_snippet(request: fastapi.Request, question:str, result_limit: int
         count = 5
         min_score = 0.9
         cypher = '''
-            CALL db.index.vector.queryNodes('questions_embedding', $count, $embedding)
+            CALL db.index.vector.queryNodes('ragquestion_embedding', $count, $embedding)
             YIELD node, score
             WITH node, score
-               WHERE 'RetrievalQuestion' in labels(node)
+               WHERE '_RAGQuestion' in labels(node)
                AND score > $min_score
-            MATCH (query:RetrievalQuery)-[:ANSWERS]-(node)
+            MATCH (query:_RAGQuery)-[:ANSWERS]-(node)
             RETURN distinct query, node as question, score
            ''' 
         res = await txn.run(cypher, parameters={'embedding': embedding, 'count': count, 'min_score': min_score})
@@ -150,7 +150,7 @@ async def _get_snippet(request: fastapi.Request, question:str, result_limit: int
         }
 
 async def _search(request: fastapi.Request, question: str):
-    collection = await model.RetrievalQueryEndpoints.factory(request)
+    collection = await model.RAGQueryEndpoints.factory(request)
     chat = ChatOpenAI()
     entity_chain = prompt.entity_identifier | chat
     driver: neo4j.AsyncDriver = db.connect(request)
@@ -187,7 +187,7 @@ async def post_search(request: fastapi.Request, payload: model.SearchParam) -> m
     return await _search(request, payload.question)
 
 # RAG Training Data: Query
-model.RetrievalQueryEndpoints.register_views(app)
+model.RAGQueryEndpoints.register_views(app)
 
 @app.post('/retrieval_query/{identifier}/question')
 async def add_question(request: fastapi.Request, identifier: int, question_id: model.NodeID) -> model.Message:
@@ -197,8 +197,8 @@ async def add_question(request: fastapi.Request, identifier: int, question_id: m
             params = {'__node_id': node_id,
                       'question_id': question_id.node_id}
             cypher = '''
-            MATCH (query:RetrievalQuery) WHERE id(query) = $__node_id
-            MATCH (question:RetrievalQuestion) WHERE id(question) = $question_id
+            MATCH (query:_RAGQuery) WHERE id(query) = $__node_id
+            MATCH (question:_RAGQuestion) WHERE id(question) = $question_id
             MERGE (query)-[:ANSWERS]->(question)
             '''
             res = await txn.run(cypher, parameters=params)
@@ -206,7 +206,7 @@ async def add_question(request: fastapi.Request, identifier: int, question_id: m
         return await session.execute_write(_job)
 
 @app.get('/retrieval_query/{identifier}/question', response_model_exclude_none=True)
-async def get_questions(request: fastapi.Request, identifier: int) -> model.ItemList[model.NodeItem[model.RetrievalQuestion]]:
+async def get_questions(request: fastapi.Request, identifier: int) -> model.ItemList[model.NodeItem[model.RAGQuestion]]:
     node_id = identifier
     session = await db.session(request)
     async def _job(txn: neo4j.AsyncTransaction):
@@ -214,23 +214,23 @@ async def get_questions(request: fastapi.Request, identifier: int) -> model.Item
             '__node_id': node_id
         }
         query = '''
-        MATCH (query:RetrievalQuery)-[:ANSWERS]-(question:RetrievalQuestion) 
+        MATCH (query:_RAGQuery)-[:ANSWERS]-(question:_RAGQuestion) 
         WHERE id(query) = $__node_id
         RETURN distinct id(question) as identifier, labels(question) as node_labels, question as node
         '''
         res = await txn.run(query=query, parameters=params)
         data = await res.data()
-        return model.ItemList[model.NodeItem[model.RetrievalQuestion]](data=[
-            model.NodeItem[model.RetrievalQuestion](
+        return model.ItemList[model.NodeItem[model.RAGQuestion]](data=[
+            model.NodeItem[model.RAGQuestion](
                 id=r['identifier'], 
                 labels=r['node_labels'], 
-                properties=model.RetrievalQuestion(question=r['node']['question']),
+                properties=model.RAGQuestion(question=r['node']['question']),
                 links=model.ItemLinks(self=str(request.url_for('read_retrieval_question', identifier=r['identifier'])))
             ) for r in data
             ])
     return await session.execute_read(_job)
 
-model.RetrievalQuestionEndpoints.register_views(app)
+model.RAGQuestionEndpoints.register_views(app)
 #
 
 #    

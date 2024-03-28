@@ -11,8 +11,8 @@ serve = functools.partial(uvicorn.run, 'ragnroll.app:app')
 
 async def _initdb(txn: neo4j.AsyncTransaction):
     query = '''
-        CREATE VECTOR INDEX questions_embedding IF NOT EXISTS
-            FOR (n:RetrievalQuestion)
+        CREATE VECTOR INDEX ragquestion_embedding IF NOT EXISTS
+            FOR (n:_RAGQuestion)
             ON (n.embedding)
             OPTIONS { indexConfig: {
                 `vector.dimensions`: 1536,
