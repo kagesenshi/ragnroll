@@ -3,62 +3,30 @@ import enum
 import typing
 import neo4j
 from .crud.model import *
-from .crud.collection import NodeCollection
-from .crud.view import NodeCollectionEndpoints
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 class QueryType(enum.StrEnum):
    CYPHER = 'cypher'
 
 class VisualizationType(enum.StrEnum):
     TEXT_ANSWER = 'text-answer'
+    TABLE = 'table'
     BAR_CHART = 'bar-chart'
     LINE_CHART = 'line-chart'
+   
+class RAGPatternOutput(pydantic.BaseModel):
+    type: VisualizationType
 
 class RAGQuestion(pydantic.BaseModel):
-    question: str
+    question: str 
 
 class RAGPattern(pydantic.BaseModel):
-    name: str
-    description: str
-
-class RAGQuery(pydantic.BaseModel):
     query: str
-    query_type: QueryType = 'cypher'
-    visualization: VisualizationType = 'text-answer'
+    output: RAGPatternOutput
+    questions: list[RAGQuestion]
 
-class Document(pydantic.BaseModel):
-    title: typing.Optional[str]
-    description: typing.Optional[str]
-    file_name: str
-    file_size: int
-    file_type: str
-    file_checksum: str
+class ConfigMetadata(pydantic.BaseModel):
+    name: str = pydantic.StringConstraints(strip_whitespace=True, strict=True, pattern=r'^[a-z0-9\-]*$')
 
-async def enrich_embedding(txn: neo4j.AsyncTransaction, collection: NodeCollection[RAGQuestion], node_id: int, item: RAGQuestion):
-    embeddings = OpenAIEmbeddings()
-    embedding = await embeddings.aembed_query(item.question)
-    await txn.run('''
-    MATCH (question:_RAGQuestion) WHERE id(question) = $__node_id
-    SET question.embedding = $embedding
-    ''', parameters={
-        '__node_id': node_id,
-        'embedding': embedding
-    })
-
-async def cascade_delete(txn: neo4j.AsyncTransaction, collection: NodeCollection[RAGQuestion], node_id: int):
-    await txn.run('''
-    MATCH (q:_RAGQuestion)-[:ANSWERS]-(qr:_RAGQuery)           
-    WHERE id(qr) = $query_id
-    DETACH DELETE q
-    ''', parameters={
-        'query_id': node_id
-    })
-
-
-RAGPatternEndpoints = NodeCollectionEndpoints('retrieval_pattern', '_RAGPattern', RAGPattern)
-RAGQueryEndpoints = NodeCollectionEndpoints('retrieval_query', '_RAGQuery', RAGQuery)
-RAGQuestionEndpoints = NodeCollectionEndpoints('retrieval_question', '_RAGQuestion', RAGQuestion, 
-                                                     after_update=enrich_embedding, 
-                                                     after_create=enrich_embedding,
-                                                     before_delete=cascade_delete)
+class RAGConfig(pydantic.BaseModel):
+    metadata: ConfigMetadata
+    patterns: list[RAGPattern] 

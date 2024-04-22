@@ -51,9 +51,26 @@ class SearchQueryMeta(pydantic.BaseModel):
     query: str
     result: str
 
+class SnippetResult(pydantic.BaseModel):
+    snippet: str
+    queries: list[SearchQueryMeta]   
+
+class TableResult(pydantic.BaseModel):
+    columns: list[str]
+    data: list[dict]
+    queries: list[SearchQueryMeta]   
+
+
+class BarchartResult(pydantic.BaseModel):
+    x_axis: str 
+    y_axis: str
+    data: list[dict]
+    queries: list[SearchQueryMeta]   
+
 class SearchMeta(pydantic.BaseModel):
-    snippet: typing.Optional[str]
-    queries: list[SearchQueryMeta]
+    snippet: typing.Optional[SnippetResult] = None
+    table: typing.Optional[TableResult] = None
+    barchart: typing.Optional[BarchartResult] = None
 
 class SearchResult(pydantic.BaseModel):
     data: list[SearchData]

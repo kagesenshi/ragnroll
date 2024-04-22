@@ -1,5 +1,6 @@
 import fastapi
-import pydantic 
+import pydantic
+import yaml.parser 
 from . import model
 from .crud import db
 import neo4j
@@ -16,13 +17,18 @@ from langchain.chains.graph_qa.prompts import CYPHER_GENERATION_PROMPT, CYPHER_Q
 from langchain.chains.graph_qa.cypher import construct_schema
 from langchain_core.runnables.base import RunnableSerializable
 from langchain.chains.graph_qa.cypher import extract_cypher
-from langchain_core.utils.input import get_colored_text, print_text, get_bolded_text
+from .crud.util import format_text
 from langchain_community.graphs import Neo4jGraph
 import json
 import asyncio
 import neo4j.spatial
 import neo4j.time
 import neo4j.graph
+from . import endpoint
+import magic
+import yaml
+import yaml.parser
+import openai
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
 
@@ -56,45 +62,36 @@ def jsonify_result(data: typing.Any, **kwargs):
 
 class QueryCorrector(object):
 
-    def __init__(self, driver: neo4j.AsyncDriver, chain: RunnableSerializable, retries=3) -> None:
-        self.chain = chain
-        self.driver = driver
+    def __init__(self, session: neo4j.AsyncSession, chat: ChatOpenAI, retries=3) -> None:
+        self.chain = prompt.cypher_corrector | chat 
+        self.session = session
         self.retries = retries
 
     async def __call__(self, query: str):
-        async with self.driver.session() as session:
-            retry = 0
-            while retry < self.retries:
-                try:
-                    res = await session.run(f'EXPLAIN {query}')
-                    return query
-                except (neo4j.exceptions.CypherSyntaxError) as e:
-                    print(e.message)
-                    message: BaseMessage = await self.chain.ainvoke({'query': query, 'error': e.message})
-                    query = extract_cypher(message.content)
+        retry = 0
+        while retry < self.retries:
+            try:
+                res = await self.session.run(f'EXPLAIN {query}')
+                return query
+            except (neo4j.exceptions.CypherSyntaxError) as e:
+                print(format_text("> Correcting query: ", bold=True))
+                print(format_text(query, color='yellow'))
+                print(format_text(e.message, color='red'))
+                message: BaseMessage = await self.chain.ainvoke({'query': query, 'error': e.message})
+                query = extract_cypher(message.content)
             retry += 1
         return None
 
-async def _get_snippet(request: fastapi.Request, question:str, result_limit: int = 50):
-    print_text(get_bolded_text(f"> Answering question: {question}"), end='\n')
-    collection = await model.RAGQueryEndpoints.factory(request)
+class QuerySample(pydantic.BaseModel):
+    question: str 
+    query: str
+    visualization: model.VisualizationType
+    score: float
 
-    chat = ChatOpenAI()
-    embeddings = OpenAIEmbeddings()
-    answer_chain = CYPHER_QA_PROMPT | chat 
-    corrector_chain = prompt.cypher_corrector | chat
-    generator_chain = CYPHER_GENERATION_PROMPT | chat
-    driver: neo4j.AsyncDriver = db.connect(request)
-    session: neo4j.AsyncSession = driver.session()
-
-    query_corrector = QueryCorrector(driver, corrector_chain)
-    qachain = GraphCypherQAChain.from_llm(chat, graph=Neo4jGraph(), verbose=True, return_intermediate_steps=True, 
-        validate_cypher=True)
-
+async def find_queries(session: neo4j.AsyncSession,
+                        embedding: list[float], 
+                        visualization: model.VisualizationType = model.VisualizationType.TEXT_ANSWER) -> list[QuerySample]:
     async def _job(txn: neo4j.AsyncTransaction):
-        print_text(get_bolded_text("> Entering embedding calculation"), end='\n')
-        embedding = await embeddings.aembed_query(question)
-        print_text(get_bolded_text("> Embedding done"), end='\n')
         count = 5
         min_score = 0.9
         cypher = '''
@@ -104,78 +101,128 @@ async def _get_snippet(request: fastapi.Request, question:str, result_limit: int
                WHERE '_RAGQuestion' in labels(node)
                AND score > $min_score
             MATCH (query:_RAGQuery)-[:ANSWERS]-(node)
+            WHERE query.output_type = $visualization
             RETURN distinct query, node as question, score
            ''' 
-        res = await txn.run(cypher, parameters={'embedding': embedding, 'count': count, 'min_score': min_score})
+        res = await txn.run(cypher, parameters={'embedding': embedding, 'count': count, 
+                                                'min_score': min_score, 'visualization': visualization
+                                                })
         return await res.data()
     
     matches = await session.execute_read(_job)
-    matches = [{'question': m['query']['query'], 
-                'query': m['question']['question'],
-                'score': m['score']} for m in matches]
-    print(matches)
-    query = None
-    driver: neo4j.AsyncDriver = db.connect(request)
-    if len(matches):
-        print_text(get_bolded_text("> Entering intent matcher"), end='\n')
-        chain = prompt.rag_query_generator | chat 
-        print(matches)
-        message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
-                f"Question: {match['question']}\nQuery: {match['query']}" for match in matches
-            ]), 'question': question})
-        query = message.content
-        if query != 'IDONOTKNOW':
-            query = await query_corrector(query)
+    matches = [QuerySample(question=m['question']['question'], 
+                query=m['query']['query'],
+                visualization=visualization,
+                score=m['score']) for m in matches]
+    return matches
 
-    if not query:
-        print_text(get_bolded_text("> Entering generator chain"), end='\n')
+async def _generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpenAI, question: str, 
+                                      samples: list[QuerySample]):
+    print(format_text("> Entering intent based query generator", bold=True))
+    print(format_text("> Sample queries:", bold=True))
+    for s in samples:
+        print(format_text(s.query, color='yellow'))
+    chain = prompt.rag_query_generator | chat 
+    message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
+            f"Question: {sample.question}\nQuery: {sample.query}" for sample in samples
+        ]), 'question': question})
+    query = message.content
+    if query != 'IDONOTKNOW':
+        query_corrector = QueryCorrector(session, chat=chat)
+        query = await query_corrector(query)
+    print(format_text(f"> Generated query:", bold=True))
+    print(format_text(query, color='yellow'))
+    return query
+
+async def _answer_question(request: fastapi.Request, question:str, result_limit: int = 50,
+                        visualization: model.VisualizationType = model.VisualizationType.TEXT_ANSWER,
+                        fallback: bool = True):
+    print(format_text(f"> Answering question: '{question}' AS {visualization}", bold=True))
+    chat = ChatOpenAI()
+    embeddings = OpenAIEmbeddings()
+    answer_chain = CYPHER_QA_PROMPT | chat 
+
+    generator_chain = CYPHER_GENERATION_PROMPT | chat
+    driver: neo4j.AsyncDriver = db.connect(request)
+    session: neo4j.AsyncSession = driver.session()
+
+    print(format_text("> Entering embedding calculation", bold=True))
+    embedding = await embeddings.aembed_query(question)
+    print(format_text("> Embedding done", bold=True))
+
+    matches = await find_queries(session, embedding, visualization=visualization) 
+
+    query = None
+    if len(matches):
+        query = await _generate_query_from_sample(session, chat, question, matches)
+
+    if not query and fallback:
+        print(format_text("> No query sample found, generating using default strategy", bold=True))
         query_msg: BaseMessage = await generator_chain.ainvoke({'question': question, 'schema': construct_schema(Neo4jGraph().get_structured_schema, [], [])})
         query = query_msg.content
-    print(f'Generated query: {query}')
-    query = await query_corrector(query)
-    print(f'Corrected query: {query}')
-    query = query + f' LIMIT {result_limit} '
-    query = await query_corrector(query)
-    print(f'Final query: {query}')
+        query_corrector = QueryCorrector(session, chat=chat)
+        query = await query_corrector(query)
+        print(format_text(f"> Generated query:", bold=True))
+        print(format_text(query, color='yellow'))
+
+    if not query:
+        return None
+    
+    query = query.strip()
+    if query.endswith(';'):
+        query = query[:-1]
+    if 'limit ' not in query.lower():
+        query = query + f' LIMIT {result_limit};'
     async with driver.session() as session:
         data = await (await session.run(query)).data()
-        answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
-        snippet = answer.content
-        return {
-            'snippet': snippet,
-            'queries': [{
-                'query': query,
-                'result': jsonify_result(data, indent=4)
-            }]
+    if not data:
+        return None 
+    result = {"queries": [{"query": query, "result": jsonify_result(data, indent=4)}]}
+    if visualization == model.VisualizationType.TEXT_ANSWER:
+        try:
+            answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
+            snippet = answer.content
+            result['snippet'] = snippet
+        except openai.BadRequestError as e:
+            pass
+    elif visualization == model.VisualizationType.TABLE:
+        result['table'] = {
+            'data': data
         }
-
-async def _search(request: fastapi.Request, question: str):
-    collection = await model.RAGQueryEndpoints.factory(request)
-    chat = ChatOpenAI()
-    entity_chain = prompt.entity_identifier | chat
-    driver: neo4j.AsyncDriver = db.connect(request)
-
-    async with driver.session() as session:
-        res = await session.run('call db.labels()') 
-        labels = [r['label'] for r in (await res.data())]
-    possible_entity = await entity_chain.ainvoke({'query': question, 'labels': '\n'.join(labels)})
-    print(possible_entity)
-    snippet = await _get_snippet(request, question)
-    if snippet:
-        return {
-            "data": [],
-            "meta": {
-                "snippet": snippet['snippet'],
-                "queries": snippet['queries']
-            }
+    elif visualization == model.VisualizationType.BAR_CHART:
+        result['barchart'] = {
+            'data': data
         }
-    return {
+    return result
+
+async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
+    snippet_result = await _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER)
+    table_result = await _answer_question(request, question, visualization=model.VisualizationType.TABLE, fallback=False)
+    barchart_result = await _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART, fallback=False)
+    result = {
         'data': [],
-        'meta': {
-            'snippet': None,
-            'queries': []
-        }
+        'meta': {}
     }
+    if snippet_result and snippet_result['snippet']:
+        result['meta']['snippet'] = {
+            'snippet': snippet_result['snippet'],
+            'queries': snippet_result['queries']
+        }
+    if table_result and table_result['table']:
+        result['meta']['table'] = {
+            'columns': list(table_result['table']['data'][0].keys()),
+            'data': table_result['table']['data'],
+            'queries': table_result['queries'],
+        }
+    if barchart_result and barchart_result['barchart']:
+        cols = list(barchart_result['barchart']['data'][0].keys())
+        result['meta']['barchart'] = {
+            'x_axis': cols[0],
+            'y_axis': cols[1],
+            'data': barchart_result['barchart']['data'],
+            'queries': barchart_result['queries'],
+        }
+    return result
 
 # Search
 @app.get("/search")
@@ -186,47 +233,120 @@ async def search(request: fastapi.Request, question: str) -> model.SearchResult:
 async def post_search(request: fastapi.Request, payload: model.SearchParam) -> model.SearchResult:
     return await _search(request, payload.question)
 
-@model.RAGQueryEndpoints.model_post('/question')
-async def add_question(request: fastapi.Request, identifier: int, question_id: model.NodeID) -> model.Message:
-        node_id = identifier
-        session: neo4j.AsyncSession = await db.session(request)
-        async def _job(txn: neo4j.AsyncTransaction):
-            params = {'__node_id': node_id,
-                      'question_id': question_id.node_id}
-            cypher = '''
-            MATCH (query:_RAGQuery) WHERE id(query) = $__node_id
-            MATCH (question:_RAGQuestion) WHERE id(question) = $question_id
-            MERGE (query)-[:ANSWERS]->(question)
-            '''
-            res = await txn.run(cypher, parameters=params)
-            return model.Message(msg='Success')
-        return await session.execute_write(_job)
-
-@model.RAGQueryEndpoints.model_get('/question', response_model_exclude_none=True)
-async def get_questions(request: fastapi.Request, identifier: int) -> model.ItemList[model.NodeItem[model.RAGQuestion]]:
-    node_id = identifier
-    session = await db.session(request)
+@app.get('/config/{identifier}')
+async def get_config(request: fastapi.Request, identifier: str):
     async def _job(txn: neo4j.AsyncTransaction):
-        params = {
-            '__node_id': node_id
-        }
         query = '''
-        MATCH (query:_RAGQuery)-[:ANSWERS]-(question:_RAGQuestion) 
-        WHERE id(query) = $__node_id
-        RETURN distinct id(question) as identifier, labels(question) as node_labels, question as node
-        '''
-        res = await txn.run(query=query, parameters=params)
-        data = await res.data()
-        return model.ItemList[model.NodeItem[model.RAGQuestion]](data=[
-            model.NodeItem[model.RAGQuestion](
-                id=r['identifier'], 
-                labels=r['node_labels'], 
-                properties=model.RAGQuestion(question=r['node']['question']),
-                links=model.ItemLinks(self=str(request.url_for('read_retrieval_question', identifier=r['identifier'])))
-            ) for r in data
-            ])
-    return await session.execute_read(_job)
+        MATCH (n:_RAGConfig {name: $name})
+        RETURN n
+        ''' 
+        result = await txn.run(query, parameters={'name': identifier})
+        return await result.single()
+    session: neo4j.AsyncSession = await db.session(request)
+    result: neo4j.Record = await session.execute_read(_job)
+    return fastapi.responses.Response(
+        content=result['n']['body'],
+        media_type='application/yaml',
+        headers={
+            'Content-Length': str(result['n']['filesize'])
+        }
+    )
 
-model.RAGPatternEndpoints.register_views(app)
-model.RAGQuestionEndpoints.register_views(app)
-model.RAGQueryEndpoints.register_views(app)
+
+@app.post('/config/')
+async def upload_config(request: fastapi.Request, file: fastapi.UploadFile):
+    if file.size > (1*1024*1024):
+        raise fastapi.responses.JSONResponse(status_code=422, content={'msg': 'File size too large'})
+    config_yaml = await file.read()
+    config_json = yaml.safe_load(config_yaml)
+    config = model.RAGConfig.model_validate_json(json.dumps(config_json))
+    session: neo4j.AsyncSession = await db.session(request)
+    embeddings = OpenAIEmbeddings()
+    async def _job(txn: neo4j.AsyncTransaction):
+        query = '''
+        MATCH (n:_RAGConfig {name: $name})
+        OPTIONAL MATCH (n)-[]-(q:_RAGQuery)
+        OPTIONAL MATCH (q)-[]-(k:_RAGQuestion)
+        DETACH DELETE k
+        DETACH DELETE q
+        DETACH DELETE n
+        '''
+        result = await txn.run(query, parameters={
+            'name': config.metadata.name
+        })
+        query = '''
+        MERGE (n:_RAGConfig {name: $name})
+        SET n.filename = $filename,
+            n.filesize = $filesize,
+            n.body = $body
+        '''
+        result = await txn.run(query=query, parameters={
+            'name': config.metadata.name,
+            'body': config_yaml.decode('utf-8'),
+            'filename': file.filename,
+            'filesize': file.size,
+            'filetype': 'application/yaml'
+        })
+        query = '''
+        MATCH (n:_RAGConfig {name: $name})
+        MATCH (n)-[]-(q:_RAGQuery)
+        DETACH DELETE (q)
+        '''
+        result = await txn.run(query=query, parameters={
+            'name': config.metadata.name,
+        })
+
+        for pattern in config.patterns:
+            query = '''
+                MATCH (n:_RAGConfig {name: $name})
+                MERGE (n)-[:CONTAINS]->(q:_RAGQuery {query: $query})
+                SET q.output_type = $output_type
+            '''
+            result = await txn.run(query=query, parameters={
+                'name': config.metadata.name,
+                'query': pattern.query,
+                'output_type': pattern.output.type
+            })
+            for question in pattern.questions:
+                query = '''
+                    MATCH (n:_RAGConfig {name: $name})-[:CONTAINS]->(q:_RAGQuery {query: $query})
+                    MERGE (q)-[:ANSWERS]->(k:_RAGQuestion {question: $question})
+                    SET k.embedding = $embedding
+                '''
+                embedding = await embeddings.aembed_query(question.question)
+                result = await txn.run(query=query, parameters={
+                    'name': config.metadata.name,
+                    'query': pattern.query,
+                    'question': question.question,
+                    'embedding': embedding
+                })
+    result = await session.execute_write(_job)
+    return fastapi.responses.RedirectResponse(url=f'/config/{config.metadata.name}')
+
+@app.delete('/config/{identifier}')
+async def delete_config(request: fastapi.Request, identifier: str) -> model.Message:
+    async def _job(txn: neo4j.AsyncTransaction):
+        query = '''
+        MATCH (n:_RAGConfig {name: $name})
+        OPTIONAL MATCH (n)-[]-(q:_RAGQuery)
+        OPTIONAL MATCH (q)-[]-(k:_RAGQuestion)
+        DETACH DELETE k
+        DETACH DELETE q
+        DETACH DELETE n
+        '''
+        result = await txn.run(query=query, parameters={'name': identifier})
+    session: neo4j.AsyncSession = await db.session(request)
+    result = await session.execute_write(_job)
+    return {
+        'msg': f'Deleted {identifier}'
+    }
+
+@app.exception_handler(yaml.parser.ParserError)
+async def parser_error(exc: yaml.parser.ParserError, request: fastapi.Request, status_code=422) -> model.Message:
+    return fastapi.responses.JSONResponse(
+        status_code=422,
+        content={
+            'msg': 'Invalid data type'
+        })
+
+# endpoint.RAGPattern.register_views(app)

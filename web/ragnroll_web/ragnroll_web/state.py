@@ -157,6 +157,13 @@ class State(rx.State):
     
     snippet: typing.Optional[str] = ""
     snippet_queries: list[dict[str, str]] = []
+    table_headers: list[str] = []
+    table_data: list[dict] = []
+    table_queries: list[dict[str, str]] = []
+    barchart_yaxis: str = ''
+    barchart_xaxis: str = ''                                   
+    barchart_data: list[dict] = []
+    barchart_queries: list[dict[str, str]] = []
     query: str = ''
     has_kp: bool = False
     alert_message: str = ""
@@ -173,14 +180,30 @@ class State(rx.State):
         self.searching = True
         self.snippet = None
         self.snippet_queries = []
+        self.barchart_xaxis = ''
+        self.barchart_yaxis = ''
+        self.barchart_data = []
+        self.barchart_queries = []
+        self.table_data = []
+        self.table_headers = []
+        self.table_queries = []
         yield
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.get(f'{settings.BACKEND_URI}/search', params={'question': form_data['question']})
                 data = response.json()
-            self.snippet = data['meta']['snippet']
-            self.snippet_queries = data['meta']['queries']
-            print("Snippet: ", data)
+            if data['meta']['snippet']:
+                self.snippet = data['meta']['snippet']['snippet']
+                self.snippet_queries = data['meta']['snippet']['queries']
+            if data['meta']['table']:
+                self.table_headers = data['meta']['table']['columns']
+                self.table_data = data['meta']['table']['data']
+                self.table_queries = data['meta']['table']['queries']
+            if data['meta']['barchart']:
+                self.barchart_xaxis = data['meta']['barchart']['x_axis']
+                self.barchart_yaxis = data['meta']['barchart']['y_axis']
+                self.barchart_data = data['meta']['barchart']['data']
+                self.barchart_queries = data['meta']['barchart']['queries']
         except httpx.ReadTimeout:
             self.alert_message = "Backend timeout"
         except httpx.ConnectError:

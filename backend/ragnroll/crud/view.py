@@ -161,7 +161,7 @@ class NodeCollectionEndpoints(typing.Generic[S]):
     @wraps(fastapi.FastAPI.put)
     def put(self, path, **kwargs):
         def _wrapper(func):
-            self._put_views[(path, 'PUT')] = {
+            self._views[(path, 'PUT')] = {
                 'method': 'PUT',
                 'path': path,
                 'params': kwargs,
@@ -170,15 +170,6 @@ class NodeCollectionEndpoints(typing.Generic[S]):
         return _wrapper
 
     def register_views(self, app: type[fastapi.FastAPI]):
-        @app.post(f"/{self.name}", name=self.create_endpoint)
-        async def create(request: fastapi.Request, payload: self.schema) -> model.NodeItem[self.schema]:
-            view = await self.view_factory(request) 
-            return await view.create(payload)
-        
-        for (path, method), opts in self._views.items():
-            if method != 'POST':
-                continue
-            app.post(path, **opts['params'])(opts['func'])
         
         @app.get(f"/{self.name}", name=self.list_endpoint, response_model_exclude_none=True)
         async def list_all(request: fastapi.Request, page:int =0, page_size: int=100) -> model.ItemList[model.NodeItem[self.schema]]:
@@ -195,7 +186,17 @@ class NodeCollectionEndpoints(typing.Generic[S]):
             if method != 'GET':
                 continue
             app.get(path, **opts['params'])(opts['func'])
+
+        @app.post(f"/{self.name}", name=self.create_endpoint)
+        async def create(request: fastapi.Request, payload: self.schema) -> model.NodeItem[self.schema]:
+            view = await self.view_factory(request) 
+            return await view.create(payload)
         
+        for (path, method), opts in self._views.items():
+            if method != 'POST':
+                continue
+            app.post(path, **opts['params'])(opts['func'])
+
         @app.put(f"/{self.name}/{{identifier}}", name=self.update_endpoint)
         async def update(request: fastapi.Request, identifier: int, payload: self.schema) -> model.NodeItem[self.schema]:
             view = await self.view_factory(request)
@@ -220,8 +221,6 @@ class NodeCollectionEndpoints(typing.Generic[S]):
             if method != 'DELETE':
                 continue
             app.delete(path, **opts['params'])(opts['func'])
-
-
 
 class NodeCollectionView(typing.Generic[S]):
 

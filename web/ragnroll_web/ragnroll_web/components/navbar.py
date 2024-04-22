@@ -21,9 +21,6 @@ def navbar() -> rx.Component:
                             rx.list_item(
                                 rx.link(rx.text('Search'), href='/')
                             ),
-                            rx.list_item(
-                                rx.link(rx.text("Retrieval Queries"), href='/retrieval_query')
-                            ),
                             list_style_type='none'
                         ),
                         top="auto",

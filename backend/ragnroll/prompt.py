@@ -19,15 +19,21 @@ rag_query_generator = ChatPromptTemplate.from_messages([
  
     Step 1: Using ONLY the examples provided, identify most similar question to what the user is asking.
     Step 2: If you do not find a similar question in the examples provided, answer "IDONOTKNOW". 
-    Step 3: Using the example query for the question, modify and generate cypher query for answering the
-            question. Return ONLY the cypher query and nothing else. 
+    Step 3: Using the example query for the question, update the cypher query to answering the
+            question. Take note that the query example is ALREADY CORRECT, you only need to update
+            the parameters to correct values. DO NOT alter number of relationship hops. Return ONLY the 
+            cypher query and nothing else. 
+
  
     Rules: 
+    - The provided example queries provide the best method to answer the question, you can only change parameters
+      but do NOT change the logic of the query
     - Do NOT include any explanations or apologies in your responses. 
     - Do NOT respond to any questions that might ask anything else than for you to construct a Cypher statement.
     - Do NOT include any text except the generated Cypher statement. 
     - DO NOT return anything that is not cypher.
     - For any string match operations, use case insensitive match
+    - Pretty format the output to with maximum 40 characters per line
 
     Examples:
     {data}
