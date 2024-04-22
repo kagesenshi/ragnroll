@@ -129,6 +129,7 @@ def table_snippet() -> rx.Component:
                                 )
                             )
                         ),
+                        width="100%"
                     ),
                 ),
                 vertical_align="top",
@@ -197,7 +198,8 @@ def barchart_snippet() -> rx.Component:
                         ),
                         rx.recharts.x_axis(data_key=State.barchart_xaxis),
                         rx.recharts.y_axis(),
-                        data=State.barchart_data
+                        data=State.barchart_data,
+                        width="100%"
                     )
                     # 
                 ),

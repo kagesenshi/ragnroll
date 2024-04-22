@@ -21,7 +21,7 @@ class RAGQuestion(pydantic.BaseModel):
 
 class RAGPattern(pydantic.BaseModel):
     query: str
-    output: RAGPatternOutput
+    output: list[RAGPatternOutput]
     questions: list[RAGQuestion]
 
 class ConfigMetadata(pydantic.BaseModel):

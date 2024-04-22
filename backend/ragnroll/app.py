@@ -309,29 +309,29 @@ async def upload_config(request: fastapi.Request, file: fastapi.UploadFile):
         })
 
         for pattern in config.patterns:
-            query = '''
-                MATCH (n:_RAGConfig {name: $name})
-                MERGE (n)-[:CONTAINS]->(q:_RAGQuery {query: $query})
-                SET q.output_type = $output_type
-            '''
-            result = await txn.run(query=query, parameters={
-                'name': config.metadata.name,
-                'query': pattern.query,
-                'output_type': pattern.output.type
-            })
-            for question in pattern.questions:
+            for output in pattern.output:
                 query = '''
-                    MATCH (n:_RAGConfig {name: $name})-[:CONTAINS]->(q:_RAGQuery {query: $query})
-                    MERGE (q)-[:ANSWERS]->(k:_RAGQuestion {question: $question})
-                    SET k.embedding = $embedding
+                    MATCH (n:_RAGConfig {name: $name})
+                    MERGE (n)-[:CONTAINS]->(q:_RAGQuery {query: $query, output_type: $output_type})
                 '''
-                embedding = await embeddings.aembed_query(question.question)
                 result = await txn.run(query=query, parameters={
                     'name': config.metadata.name,
                     'query': pattern.query,
-                    'question': question.question,
-                    'embedding': embedding
+                    'output_type': output.type
                 })
+                for question in pattern.questions:
+                    query = '''
+                        MATCH (n:_RAGConfig {name: $name})-[:CONTAINS]->(q:_RAGQuery {query: $query})
+                        MERGE (q)-[:ANSWERS]->(k:_RAGQuestion {question: $question})
+                        SET k.embedding = $embedding
+                    '''
+                    embedding = await embeddings.aembed_query(question.question)
+                    result = await txn.run(query=query, parameters={
+                        'name': config.metadata.name,
+                        'query': pattern.query,
+                        'question': question.question,
+                        'embedding': embedding
+                    })
     result = await session.execute_write(_job)
     return fastapi.responses.RedirectResponse(url=f'/config/{config.metadata.name}')
 
