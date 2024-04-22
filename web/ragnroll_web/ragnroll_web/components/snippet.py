@@ -190,7 +190,7 @@ def barchart_snippet() -> rx.Component:
         rx.vstack(
             rx.card(
                 rx.vstack(
-                    rx.hstack(rx.spacer(), drawer),
+                    rx.hstack(rx.text(''), rx.spacer(), drawer, align="end"),
                     rx.recharts.bar_chart(
                         rx.recharts.bar(
                             data_key=State.barchart_yaxis

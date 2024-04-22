@@ -3,6 +3,7 @@ import pydantic
 import yaml.parser 
 from . import model
 from .crud import db
+from . import settings
 import neo4j
 import neo4j.exceptions
 import typing
@@ -29,6 +30,7 @@ import magic
 import yaml
 import yaml.parser
 import openai
+import os
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
 
@@ -196,9 +198,19 @@ async def _answer_question(request: fastapi.Request, question:str, result_limit:
     return result
 
 async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
-    snippet_result = await _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER)
-    table_result = await _answer_question(request, question, visualization=model.VisualizationType.TABLE, fallback=False)
-    barchart_result = await _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART, fallback=False)
+
+    if settings.DEBUG:
+        snippet_result = await _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER)
+        table_result = await _answer_question(request, question, visualization=model.VisualizationType.TABLE, fallback=False)
+        barchart_result = await _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART, fallback=False)
+    else:
+        answers = await asyncio.gather(
+            _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER),
+            _answer_question(request, question, visualization=model.VisualizationType.TABLE, fallback=False),
+            _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART, fallback=False)
+        )
+        snippet_result, table_result, barchart_result = answers
+
     result = {
         'data': [],
         'meta': {}
