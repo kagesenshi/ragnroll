@@ -2,11 +2,11 @@ import reflex as rx
 import time
 import asyncio
 
-from ragnroll_web.state import State
+from ragnroll_web.state import State, SearchResultItem
 
-def text_snippet() -> rx.Component:
+def text_snippet(result: SearchResultItem) -> rx.Component:
     queries = rx.foreach(
-            State.snippet_queries,
+            result.queries,
             lambda item, idx: rx.vstack(
                     rx.text('Query'),
                     rx.code_block(
@@ -25,7 +25,7 @@ def text_snippet() -> rx.Component:
                     padding_right="10px"
                 ),
             )
-
+    
     drawer = rx.drawer.root(
         rx.drawer.trigger(
             rx.button(rx.icon(tag='message_circle_question'))
@@ -49,9 +49,9 @@ def text_snippet() -> rx.Component:
     )
 
     return rx.cond(
-        State.snippet,
+        result.data,
         rx.vstack(
-            rx.card(rx.hstack(rx.text(State.snippet), rx.spacer(), drawer), vertical_align="top", width="100%"),
+            rx.card(rx.hstack(rx.text(result.data[0]['answer']), rx.spacer(), drawer), vertical_align="top", width="100%"),
             id="featuredSnippet",
             width="100%",
             padding_left="100px",
@@ -60,9 +60,9 @@ def text_snippet() -> rx.Component:
     )
 
 
-def table_snippet() -> rx.Component:
+def table_snippet(result: SearchResultItem) -> rx.Component:
     queries = rx.foreach(
-            State.table_queries,
+            result.queries,
             lambda item, idx: rx.vstack(
                     rx.text('Query'),
                     rx.code_block(
@@ -105,7 +105,7 @@ def table_snippet() -> rx.Component:
     )
 
     return rx.cond(
-        State.table_data,
+        result.data,
         rx.vstack(
             rx.card(
                 rx.vstack(
@@ -114,17 +114,17 @@ def table_snippet() -> rx.Component:
                         rx.table.header(
                             rx.table.row(
                                 rx.foreach(
-                                    State.table_headers,
-                                    lambda item, idx: rx.table.column_header_cell(item),
+                                    result.fields,
+                                    lambda field, idx: rx.table.column_header_cell(field),
                                 )
                             )
                         ),
                         rx.table.body(
                             rx.foreach(
-                                State.table_data, lambda row, idx: rx.table.row(
+                                result.data, lambda row, idx: rx.table.row(
                                     rx.foreach(
-                                        State.table_headers,
-                                        lambda item, idx: rx.table.cell(row[item])
+                                        result.fields,
+                                        lambda field, idx: rx.table.cell(row[field])
                                     )
                                 )
                             )
@@ -142,9 +142,9 @@ def table_snippet() -> rx.Component:
         ),
     )
 
-def barchart_snippet() -> rx.Component:
+def barchart_snippet(result: SearchResultItem) -> rx.Component:
     queries = rx.foreach(
-            State.barchart_queries,
+            result.queries,
             lambda item, idx: rx.vstack(
                     rx.text('Query'),
                     rx.code_block(
@@ -187,18 +187,18 @@ def barchart_snippet() -> rx.Component:
     )
 
     return rx.cond(
-        State.barchart_data,
+        result.data,
         rx.vstack(
             rx.card(
                 rx.vstack(
                     rx.hstack(rx.text(''), rx.spacer(), drawer, align="end"),
                     rx.recharts.bar_chart(
                         rx.recharts.bar(
-                            data_key=State.barchart_yaxis
+                            data_key=result.axes['y']
                         ),
-                        rx.recharts.x_axis(data_key=State.barchart_xaxis),
+                        rx.recharts.x_axis(data_key=result.axes['x']),
                         rx.recharts.y_axis(),
-                        data=State.barchart_data,
+                        data=result.data,
                         width="100%"
                     )
                     # 

@@ -8,7 +8,6 @@ from ragnroll_web.components import (
     table_snippet,
     barchart_snippet
 )
-from .components.crud import crud_page
 from .components.util import wrap_search
 import reflex as rx
 from . import state
@@ -29,6 +28,14 @@ def main_template(component: rx.Component, **kwargs):
         rx.vstack(component, width="100%", margin_left="20px", margin_right="20px"),
         width="100%",
         **kwargs
+    )
+
+def render_snippet(item: state.SearchResultItem):
+    return rx.match(item.visualization,
+        ('text-answer', text_snippet(item)),
+        ('table', table_snippet(item)),
+        ('bar-chart', barchart_snippet(item)),
+        rx.text("No search result")
     )
 
 @rx.page(route='/')
@@ -56,10 +63,10 @@ def index() -> rx.Component:
                 width="100%"
             ),
             wrap_search(
-                rx.vstack(
-                    text_snippet(),
-                    table_snippet(),
-                    barchart_snippet(),
+                rx.vstack(rx.foreach(
+                    state.State.search_results,
+                    render_snippet
+                    ),
                     width='100%'
                 )
             ),

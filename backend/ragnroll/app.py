@@ -148,7 +148,7 @@ async def _generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpe
 
 async def _answer_question(request: fastapi.Request, question:str, result_limit: int = 50,
                         visualization: model.VisualizationType = model.VisualizationType.TEXT_ANSWER,
-                        fallback: bool = True):
+                        fallback: bool = False):
     print(format_text(f"> Answering question: '{question}' AS {visualization}", bold=True))
     chat = ChatOpenAI()
     embeddings = OpenAIEmbeddings()
@@ -189,35 +189,37 @@ async def _answer_question(request: fastapi.Request, question:str, result_limit:
         data = await (await session.run(query)).data()
     if not data:
         return None 
-    result = {"queries": [{"query": query, "result": jsonify_result(data, indent=4)}]}
+    result = {"queries": [{"query": query, "result": jsonify_result(data, indent=4)}],
+              'visualization': visualization}
     if visualization == model.VisualizationType.TEXT_ANSWER:
         try:
             answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
             snippet = answer.content
-            result['snippet'] = snippet
+            result['data'] = [{'answer': snippet}]
+            result['fields'] = ['answer']
         except openai.BadRequestError as e:
             pass
     elif visualization == model.VisualizationType.TABLE:
-        result['table'] = {
-            'data': data
-        }
+        result['data'] = data
+        result['fields'] = list(data[0].keys())
     elif visualization == model.VisualizationType.BAR_CHART:
-        result['barchart'] = {
-            'data': data
-        }
+        cols = list(data[0].keys())
+        result['data'] = data
+        result['fields'] = cols
+        result['axes'] = {'x': cols[0], 'y': cols[1]}
     return result
 
 async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
 
     if settings.DEBUG:
-        snippet_result = await _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER)
-        table_result = await _answer_question(request, question, visualization=model.VisualizationType.TABLE, fallback=False)
-        barchart_result = await _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART, fallback=False)
+        snippet_result = await _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER, fallback=True)
+        table_result = await _answer_question(request, question, visualization=model.VisualizationType.TABLE)
+        barchart_result = await _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART)
     else:
         answers = await asyncio.gather(
-            _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER),
-            _answer_question(request, question, visualization=model.VisualizationType.TABLE, fallback=False),
-            _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART, fallback=False)
+            _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER, fallback=True),
+            _answer_question(request, question, visualization=model.VisualizationType.TABLE),
+            _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART)
         )
         snippet_result, table_result, barchart_result = answers
 
@@ -225,33 +227,22 @@ async def _search(request: fastapi.Request, question: str) -> model.SearchResult
         'data': [],
         'meta': {}
     }
-    if snippet_result and snippet_result['snippet']:
-        result['meta']['snippet'] = {
-            'snippet': snippet_result['snippet'],
-            'queries': snippet_result['queries']
-        }
-    if table_result and table_result['table']:
-        result['meta']['table'] = {
-            'columns': list(table_result['table']['data'][0].keys()),
-            'data': table_result['table']['data'],
-            'queries': table_result['queries'],
-        }
-    if barchart_result and barchart_result['barchart']:
-        cols = list(barchart_result['barchart']['data'][0].keys())
-        result['meta']['barchart'] = {
-            'x_axis': cols[0],
-            'y_axis': cols[1],
-            'data': barchart_result['barchart']['data'],
-            'queries': barchart_result['queries'],
-        }
+    output_data = []
+    if snippet_result:
+        output_data.append(snippet_result)
+    if table_result:
+        output_data.append(table_result)
+    if barchart_result:
+        output_data.append(barchart_result)
+    result['data'] = output_data
     return result
 
 # Search
-@app.get("/search")
+@app.get("/search", response_model_exclude_none=True, response_model_exclude_unset=True)
 async def search(request: fastapi.Request, question: str) -> model.SearchResult:
     return await _search(request, question)
 
-@app.post("/search")
+@app.post("/search", response_model_exclude_none=True, response_model_exclude_unset=True)
 async def post_search(request: fastapi.Request, payload: model.SearchParam) -> model.SearchResult:
     return await _search(request, payload.question)
 
@@ -274,9 +265,6 @@ async def get_config(request: fastapi.Request, identifier: str):
         }
     )
 
-#@app.get('/config/')
-#async def list_configs(request: fastapi.Request) -> model.ItemList[]
-#
 @app.post('/config/')
 async def upload_config(request: fastapi.Request):
     config = await extract_model(model.RAGConfig, request)
@@ -360,11 +348,19 @@ async def delete_config(request: fastapi.Request, identifier: str) -> model.Mess
     }
 
 @app.exception_handler(yaml.parser.ParserError)
-async def parser_error(exc: yaml.parser.ParserError, request: fastapi.Request, status_code=422) -> model.Message:
+async def parser_error(exc: yaml.parser.ParserError, request: fastapi.Request) -> model.Message:
     return fastapi.responses.JSONResponse(
         status_code=422,
         content={
             'msg': 'Invalid data type'
         })
 
-# endpoint.RAGPattern.register_views(app)
+@app.exception_handler(fastapi.HTTPException)
+async def http_exc(exc: fastapi.HTTPException):
+    return fastapi.responses.JSONResponse(
+        status_code=exc.status_code,
+        content={
+            'msg': exc.detail
+        }
+    )
+

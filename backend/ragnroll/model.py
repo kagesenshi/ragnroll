@@ -12,38 +12,11 @@ class SearchData(pydantic.BaseModel):
     match: str
     url: pydantic.AnyHttpUrl
 
-class SearchQueryMeta(pydantic.BaseModel):
-
-    query: str
-    result: str
-
-class SnippetResult(pydantic.BaseModel):
-    snippet: str
-    queries: list[SearchQueryMeta]   
-
-class TableResult(pydantic.BaseModel):
-    columns: list[str]
-    data: list[dict]
-    queries: list[SearchQueryMeta]   
-
-
-class BarchartResult(pydantic.BaseModel):
-    x_axis: str 
-    y_axis: str
-    data: list[dict]
-    queries: list[SearchQueryMeta]   
-
 class SearchMeta(pydantic.BaseModel):
-    snippet: typing.Optional[SnippetResult] = None
-    table: typing.Optional[TableResult] = None
-    barchart: typing.Optional[BarchartResult] = None
-
-class SearchResult(pydantic.BaseModel):
-    data: list[SearchData]
-    meta: SearchMeta
+    pass 
 
 class Message(pydantic.BaseModel):
-    msg: typing.Optional[str]
+    msg: str
 
 class QueryType(enum.StrEnum):
    CYPHER = 'cypher'
@@ -71,3 +44,23 @@ class ConfigMetadata(pydantic.BaseModel):
 class RAGConfig(pydantic.BaseModel):
     metadata: ConfigMetadata
     patterns: list[RAGPattern] 
+
+class Axes(pydantic.BaseModel):
+    x: typing.Optional[str] = None
+    y: typing.Optional[str] = None
+    z: typing.Optional[str] = None
+
+class SearchQueryMeta(pydantic.BaseModel):
+    query: str
+    result: str
+
+class SearchResultItem(pydantic.BaseModel):
+    data: list[dict]
+    queries: list[SearchQueryMeta]    
+    visualization: VisualizationType
+    fields: list[str]
+    axes: Axes = pydantic.Field(default_factory=Axes)
+ 
+class SearchResult(pydantic.BaseModel):
+    data: list[SearchResultItem]
+#    meta: SearchMeta
