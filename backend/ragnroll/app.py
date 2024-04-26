@@ -2,14 +2,13 @@ import fastapi
 import pydantic
 import yaml.parser 
 from . import model
-from .crud import db
+from . import db
 from . import settings
 import neo4j
 import neo4j.exceptions
 import typing
 import urllib.parse
 from . import prompt
-from .crud.view import NodeCollectionView
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages.base import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -18,14 +17,13 @@ from langchain.chains.graph_qa.prompts import CYPHER_GENERATION_PROMPT, CYPHER_Q
 from langchain.chains.graph_qa.cypher import construct_schema
 from langchain_core.runnables.base import RunnableSerializable
 from langchain.chains.graph_qa.cypher import extract_cypher
-from .crud.util import format_text
+from .util import format_text
 from langchain_community.graphs import Neo4jGraph
 import json
 import asyncio
 import neo4j.spatial
 import neo4j.time
 import neo4j.graph
-from . import endpoint
 import magic
 import yaml
 import yaml.parser
@@ -33,6 +31,16 @@ import openai
 import os
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
+
+S = typing.TypeVar('S', bound=pydantic.BaseModel)
+async def extract_model(schema: type[S], request: fastapi.Request) -> S:
+    content_type = request.headers.get('Content-Type')
+    if content_type.lower() in ['application/yaml', 'text/x-yaml', 'application/x-yaml']:
+        config_yaml = (await request.body()).decode('utf-8')
+        config_json = json.dumps(yaml.safe_load(config_yaml))
+    elif content_type.lower() in ['application/json', 'text/json']:
+        config_json = await request.body()
+    return schema.model_validate_json(config_json)
 
 class CypherChainOutput(typing.TypedDict):
     query: str 
@@ -132,6 +140,8 @@ async def _generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpe
     if query != 'IDONOTKNOW':
         query_corrector = QueryCorrector(session, chat=chat)
         query = await query_corrector(query)
+    else:
+        return None
     print(format_text(f"> Generated query:", bold=True))
     print(format_text(query, color='yellow'))
     return query
@@ -258,20 +268,18 @@ async def get_config(request: fastapi.Request, identifier: str):
     result: neo4j.Record = await session.execute_read(_job)
     return fastapi.responses.Response(
         content=result['n']['body'],
-        media_type='application/yaml',
+        media_type=result['n']['filetype'],
         headers={
             'Content-Length': str(result['n']['filesize'])
         }
     )
 
-
+#@app.get('/config/')
+#async def list_configs(request: fastapi.Request) -> model.ItemList[]
+#
 @app.post('/config/')
-async def upload_config(request: fastapi.Request, file: fastapi.UploadFile):
-    if file.size > (1*1024*1024):
-        raise fastapi.responses.JSONResponse(status_code=422, content={'msg': 'File size too large'})
-    config_yaml = await file.read()
-    config_json = yaml.safe_load(config_yaml)
-    config = model.RAGConfig.model_validate_json(json.dumps(config_json))
+async def upload_config(request: fastapi.Request):
+    config = await extract_model(model.RAGConfig, request)
     session: neo4j.AsyncSession = await db.session(request)
     embeddings = OpenAIEmbeddings()
     async def _job(txn: neo4j.AsyncTransaction):
@@ -288,16 +296,14 @@ async def upload_config(request: fastapi.Request, file: fastapi.UploadFile):
         })
         query = '''
         MERGE (n:_RAGConfig {name: $name})
-        SET n.filename = $filename,
-            n.filesize = $filesize,
+        SET n.filesize = $filesize,
             n.body = $body
         '''
         result = await txn.run(query=query, parameters={
             'name': config.metadata.name,
-            'body': config_yaml.decode('utf-8'),
-            'filename': file.filename,
-            'filesize': file.size,
-            'filetype': 'application/yaml'
+            'body': config.model_dump_json(),
+            'filesize': len(config.model_dump_json()),
+            'filetype': 'application/json'
         })
         query = '''
         MATCH (n:_RAGConfig {name: $name})

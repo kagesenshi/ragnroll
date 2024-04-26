@@ -1,4 +1,4 @@
-from .. import settings
+from . import settings
 import fastapi
 import neo4j
 

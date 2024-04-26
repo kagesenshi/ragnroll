@@ -5,7 +5,7 @@ import uvicorn
 import functools
 import asyncio
 import neo4j
-from .crud.db import connect
+from .db import connect
 
 serve = functools.partial(uvicorn.run, 'ragnroll.app:app')
 
