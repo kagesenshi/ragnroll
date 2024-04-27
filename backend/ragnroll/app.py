@@ -99,8 +99,7 @@ class QuerySample(pydantic.BaseModel):
     score: float
 
 async def find_queries(session: neo4j.AsyncSession,
-                        embedding: list[float], 
-                        visualization: model.VisualizationType = model.VisualizationType.TEXT_ANSWER) -> list[QuerySample]:
+                        embedding: list[float]) -> list[QuerySample]:
     async def _job(txn: neo4j.AsyncTransaction):
         count = 5
         min_score = 0.9
@@ -110,19 +109,18 @@ async def find_queries(session: neo4j.AsyncSession,
             WITH node, score
                WHERE '_RAGQuestion' in labels(node)
                AND score > $min_score
-            MATCH (query:_RAGQuery)-[:ANSWERS]-(node)
-            WHERE query.output_type = $visualization
+            MATCH (query:_RAGQuery)-[:CONTAINS]-(p:_RAGPattern)-[:CONTAINS]-(node)
             RETURN distinct query, node as question, score
            ''' 
         res = await txn.run(cypher, parameters={'embedding': embedding, 'count': count, 
-                                                'min_score': min_score, 'visualization': visualization
-                                                })
-        return await res.data()
+                                                'min_score': min_score})
+        queries = await res.data()
+        return queries
     
     matches = await session.execute_read(_job)
     matches = [QuerySample(question=m['question']['question'], 
                 query=m['query']['query'],
-                visualization=visualization,
+                visualization=m['query']['visualization'],
                 score=m['score']) for m in matches]
     return matches
 
@@ -162,8 +160,12 @@ async def _answer_question(request: fastapi.Request, question:str, result_limit:
     embedding = await embeddings.aembed_query(question)
     print(format_text("> Embedding done", bold=True))
 
-    matches = await find_queries(session, embedding, visualization=visualization) 
-
+    matches = await find_queries(session, embedding) 
+    if fallback and [m for m in matches if m.visualization != visualization]:
+        # do not fallback if there's matches in other types
+        return None
+    
+    matches = [m for m in matches if m.visualization == visualization]
     query = None
     if len(matches):
         query = await _generate_query_from_sample(session, chat, question, matches)
@@ -246,11 +248,11 @@ async def search(request: fastapi.Request, question: str) -> model.SearchResult:
 async def post_search(request: fastapi.Request, payload: model.SearchParam) -> model.SearchResult:
     return await _search(request, payload.question)
 
-@app.get('/config/{identifier}')
-async def get_config(request: fastapi.Request, identifier: str):
+@app.get('/expertise/{identifier}')
+async def get_expertise(request: fastapi.Request, identifier: str):
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
-        MATCH (n:_RAGConfig {name: $name})
+        MATCH (n:_RAGExpertise {name: $name})
         RETURN n
         ''' 
         result = await txn.run(query, parameters={'name': identifier})
@@ -265,15 +267,16 @@ async def get_config(request: fastapi.Request, identifier: str):
         }
     )
 
-@app.post('/config/')
-async def upload_config(request: fastapi.Request):
-    config = await extract_model(model.RAGConfig, request)
+@app.post('/expertise/')
+async def upload_expertise(request: fastapi.Request):
+    config = await extract_model(model.RAGExpertise, request)
     session: neo4j.AsyncSession = await db.session(request)
     embeddings = OpenAIEmbeddings()
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
-        MATCH (n:_RAGConfig {name: $name})
-        OPTIONAL MATCH (n)-[]-(q:_RAGQuery)
+        MATCH (n:_RAGExpertise {name: $name})
+        OPTIONAL MATCH (n)-[]-(p:_RAGPattern)
+        OPTIONAL MATCH (p)-[]-(q:_RAGQuery)
         OPTIONAL MATCH (q)-[]-(k:_RAGQuestion)
         DETACH DELETE k
         DETACH DELETE q
@@ -283,7 +286,7 @@ async def upload_config(request: fastapi.Request):
             'name': config.metadata.name
         })
         query = '''
-        MERGE (n:_RAGConfig {name: $name})
+        MERGE (n:_RAGExpertise {name: $name})
         SET n.filesize = $filesize,
             n.body = $body
         '''
@@ -293,48 +296,45 @@ async def upload_config(request: fastapi.Request):
             'filesize': len(config.model_dump_json()),
             'filetype': 'application/json'
         })
-        query = '''
-        MATCH (n:_RAGConfig {name: $name})
-        MATCH (n)-[]-(q:_RAGQuery)
-        DETACH DELETE (q)
-        '''
-        result = await txn.run(query=query, parameters={
-            'name': config.metadata.name,
-        })
 
         for pattern in config.patterns:
-            for output in pattern.output:
+            for answer in pattern.answers:
                 query = '''
-                    MATCH (n:_RAGConfig {name: $name})
-                    MERGE (n)-[:CONTAINS]->(q:_RAGQuery {query: $query, output_type: $output_type})
+                    MATCH (n:_RAGExpertise {name: $name})
+                    MERGE (p:_RAGPattern {name: $pattern_name})
+                    MERGE (n)-[:CONTAINS]->(p)
+                    MERGE (p)-[:CONTAINS]->(q:_RAGQuery {query: $query, visualization: $visualization})
                 '''
                 result = await txn.run(query=query, parameters={
                     'name': config.metadata.name,
-                    'query': pattern.query,
-                    'output_type': output.type
+                    'pattern_name': pattern.name,
+                    'query': answer.query,
+                    'visualization': answer.visualization
                 })
-                for question in pattern.questions:
-                    query = '''
-                        MATCH (n:_RAGConfig {name: $name})-[:CONTAINS]->(q:_RAGQuery {query: $query})
-                        MERGE (q)-[:ANSWERS]->(k:_RAGQuestion {question: $question})
-                        SET k.embedding = $embedding
-                    '''
-                    embedding = await embeddings.aembed_query(question.question)
-                    result = await txn.run(query=query, parameters={
-                        'name': config.metadata.name,
-                        'query': pattern.query,
-                        'question': question.question,
-                        'embedding': embedding
-                    })
+            for question in pattern.questions:
+                query = '''
+                    MATCH (n:_RAGExpertise {name: $name})-[:CONTAINS]->(p:_RAGPattern {name: $pattern_name})
+                    MERGE (p)-[:CONTAINS]->(k:_RAGQuestion {question: $question, language: $language})
+                    SET k.embedding = $embedding
+                '''
+                embedding = await embeddings.aembed_query(question.question)
+                result = await txn.run(query=query, parameters={
+                    'name': config.metadata.name,
+                    'pattern_name': pattern.name,
+                    'question': question.question,
+                    'language': question.language,
+                    'embedding': embedding
+                })
     result = await session.execute_write(_job)
-    return fastapi.responses.RedirectResponse(url=f'/config/{config.metadata.name}')
+    return fastapi.responses.RedirectResponse(url=f'/expertise/{config.metadata.name}')
 
-@app.delete('/config/{identifier}')
-async def delete_config(request: fastapi.Request, identifier: str) -> model.Message:
+@app.delete('/expertise/{identifier}')
+async def delete_expertise(request: fastapi.Request, identifier: str) -> model.Message:
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
-        MATCH (n:_RAGConfig {name: $name})
-        OPTIONAL MATCH (n)-[]-(q:_RAGQuery)
+        MATCH (n:_RAGExpertise {name: $name})
+        OPTIONAL MATCH (n)-[]-(p:_RAGPattern)
+        OPTIONAL MATCH (p)-[]-(q:_RAGQuery)
         OPTIONAL MATCH (q)-[]-(k:_RAGQuestion)
         DETACH DELETE k
         DETACH DELETE q

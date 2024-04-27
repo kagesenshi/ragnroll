@@ -26,22 +26,29 @@ class VisualizationType(enum.StrEnum):
     TABLE = 'table'
     BAR_CHART = 'bar-chart'
     LINE_CHART = 'line-chart'
-   
-class RAGPatternOutput(pydantic.BaseModel):
-    type: VisualizationType
+
+class Language(enum.StrEnum):
+    en_US = 'en_US'
+    ms_MY = 'ms_MY'
 
 class RAGQuestion(pydantic.BaseModel):
     question: str 
+    language: Language = Language.en_US
+
+class RAGAnswer(pydantic.BaseModel):
+    query: str 
+    visualization: VisualizationType = VisualizationType.TEXT_ANSWER
 
 class RAGPattern(pydantic.BaseModel):
-    query: str
-    output: list[RAGPatternOutput]
+    name: str = pydantic.StringConstraints(strip_whitespace=True, strict=True, pattern=r'^[a-z0-9\-]*$')
     questions: list[RAGQuestion]
+    answers: list[RAGAnswer]
+
 
 class ConfigMetadata(pydantic.BaseModel):
     name: str = pydantic.StringConstraints(strip_whitespace=True, strict=True, pattern=r'^[a-z0-9\-]*$')
 
-class RAGConfig(pydantic.BaseModel):
+class RAGExpertise(pydantic.BaseModel):
     metadata: ConfigMetadata
     patterns: list[RAGPattern] 
 
