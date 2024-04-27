@@ -35,7 +35,7 @@ def render_snippet(item: state.SearchResultItem):
         ('text-answer', text_snippet(item)),
         ('table', table_snippet(item)),
         ('bar-chart', barchart_snippet(item)),
-        rx.text("No search result")
+        rx.text("Unsupported visualization : ", item.visualization)
     )
 
 @rx.page(route='/')
@@ -63,9 +63,11 @@ def index() -> rx.Component:
                 width="100%"
             ),
             wrap_search(
-                rx.vstack(rx.foreach(
-                    state.State.search_results,
-                    render_snippet
+                rx.vstack(
+                    rx.cond(
+                        state.State.search_results,
+                        rx.foreach(state.State.search_results,render_snippet),
+                        rx.text("No search results")
                     ),
                     width='100%'
                 )

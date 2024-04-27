@@ -144,30 +144,35 @@ async def _generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpe
     print(format_text(query, color='yellow'))
     return query
 
-async def _answer_question(request: fastapi.Request, question:str, result_limit: int = 50,
+async def _answer_question(request: fastapi.Request, question: str, 
+                           embedding: typing.Optional[list[float]] = None, result_limit: int = 50,
                         visualization: model.VisualizationType = model.VisualizationType.TEXT_ANSWER,
                         fallback: bool = False):
+    
     print(format_text(f"> Answering question: '{question}' AS {visualization}", bold=True))
     chat = ChatOpenAI()
-    embeddings = OpenAIEmbeddings()
+
     answer_chain = CYPHER_QA_PROMPT | chat 
 
     generator_chain = CYPHER_GENERATION_PROMPT | chat
     driver: neo4j.AsyncDriver = db.connect(request)
     session: neo4j.AsyncSession = driver.session()
 
-    print(format_text("> Entering embedding calculation", bold=True))
-    embedding = await embeddings.aembed_query(question)
-    print(format_text("> Embedding done", bold=True))
+    if embedding is None:
+        print(format_text("> Entering embedding calculation", bold=True))
+        embeddings = OpenAIEmbeddings()
+        embedding = await embeddings.aembed_query(question)
+        print(format_text("> Embedding done", bold=True))
 
-    matches = await find_queries(session, embedding) 
-    if fallback and [m for m in matches if m.visualization != visualization]:
+    queries = await find_queries(session, embedding)
+    matches = [m for m in queries if m.visualization == visualization]
+    other_matches = [m for m in queries if m.visualization != visualization]
+    if not matches and fallback and other_matches:
         # do not fallback if there's matches in other types
         return None
     
-    matches = [m for m in matches if m.visualization == visualization]
     query = None
-    if len(matches):
+    if matches:
         query = await _generate_query_from_sample(session, chat, question, matches)
 
     if not query and fallback:
@@ -212,31 +217,34 @@ async def _answer_question(request: fastapi.Request, question:str, result_limit:
     return result
 
 async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
+    print(format_text(f"> Searching: '{question}'", bold=True))
+    print(format_text("> Entering embedding calculation", bold=True))
+    embeddings = OpenAIEmbeddings()
+    embedding = await embeddings.aembed_query(question)
+    print(format_text("> Embedding done", bold=True))
+
+    answer_promises = []
+    for v in model.VisualizationType:
+        opts = dict(
+            request=request,
+            question=question,
+            embedding=embedding,
+            visualization=v
+        )
+        if v == model.VisualizationType.TEXT_ANSWER:
+            opts['fallback'] = True 
+        answer_promises.append(_answer_question(**opts))
 
     if settings.DEBUG:
-        snippet_result = await _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER, fallback=True)
-        table_result = await _answer_question(request, question, visualization=model.VisualizationType.TABLE)
-        barchart_result = await _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART)
+        answers = [await p for p in answer_promises]
     else:
-        answers = await asyncio.gather(
-            _answer_question(request, question, visualization=model.VisualizationType.TEXT_ANSWER, fallback=True),
-            _answer_question(request, question, visualization=model.VisualizationType.TABLE),
-            _answer_question(request, question, visualization=model.VisualizationType.BAR_CHART)
-        )
-        snippet_result, table_result, barchart_result = answers
+        answers = await asyncio.gather(*answer_promises)
 
     result = {
         'data': [],
         'meta': {}
     }
-    output_data = []
-    if snippet_result:
-        output_data.append(snippet_result)
-    if table_result:
-        output_data.append(table_result)
-    if barchart_result:
-        output_data.append(barchart_result)
-    result['data'] = output_data
+    result['data'] = [a for a in answers if a]
     return result
 
 # Search

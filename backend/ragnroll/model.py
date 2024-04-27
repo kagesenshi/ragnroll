@@ -23,9 +23,10 @@ class QueryType(enum.StrEnum):
 
 class VisualizationType(enum.StrEnum):
     TEXT_ANSWER = 'text-answer'
-    TABLE = 'table'
     BAR_CHART = 'bar-chart'
     LINE_CHART = 'line-chart'
+    TABLE = 'table'
+
 
 class Language(enum.StrEnum):
     en_US = 'en_US'
