@@ -3,6 +3,7 @@ import enum
 import typing
 import neo4j
 
+T = typing.TypeVar('T', bound=pydantic.BaseModel)
 
 class SearchParam(pydantic.BaseModel):
     question: str
@@ -49,9 +50,15 @@ class RAGPattern(pydantic.BaseModel):
 class ConfigMetadata(pydantic.BaseModel):
     name: str = pydantic.StringConstraints(strip_whitespace=True, strict=True, pattern=r'^[a-z0-9\-]*$')
 
-class RAGExpertise(pydantic.BaseModel):
+class RAGExpertiseSpec(pydantic.BaseModel):
+    patterns: list[RAGPattern]    
+
+class Config(pydantic.BaseModel, typing.Generic[T]):
+    kind: str
     metadata: ConfigMetadata
-    patterns: list[RAGPattern] 
+    spec: T
+
+RAGExpertise = Config[RAGExpertiseSpec]
 
 class Axes(pydantic.BaseModel):
     x: typing.Optional[str] = None
