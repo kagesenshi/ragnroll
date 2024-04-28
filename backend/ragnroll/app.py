@@ -3,9 +3,9 @@ import yaml.parser
 from . import model
 from . import db
 from . import settings
+from .langchain import chat_model, embeddings_model
 import neo4j
 import neo4j.exceptions
-from langchain_openai import OpenAIEmbeddings
 from .util import format_text, extract_model
 import asyncio
 import neo4j.spatial
@@ -14,17 +14,19 @@ import neo4j.graph
 import yaml
 import yaml.parser
 import pydantic
-from .rag import answer_question
+from .rag import answer_question, default_search
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
 
 async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
     print(format_text(f"> Searching: '{question}'", bold=True))
     print(format_text("> Entering embedding calculation", bold=True))
-    embeddings = OpenAIEmbeddings()
-    embedding = await embeddings.aembed_query(question)
+    embedding = await embeddings_model.aembed_query(question)
     print(format_text("> Embedding done", bold=True))
-    answers = await answer_question(request, question, embedding)
+    driver = db.connect(request)
+    answers = await answer_question(question, embedding=embedding, driver=driver)
+    if not answers:
+        answers = await default_search(question, driver=driver)
     return model.SearchResult(data=answers)
 
 # Search
@@ -59,7 +61,6 @@ async def get_expertise(request: fastapi.Request, identifier: str):
 async def upload_expertise(request: fastapi.Request):
     config = await extract_model(model.RAGExpertise, request)
     session: neo4j.AsyncSession = await db.session(request)
-    embeddings = OpenAIEmbeddings()
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
         MATCH (n:_RAGExpertise {name: $name})
@@ -104,7 +105,7 @@ async def upload_expertise(request: fastapi.Request):
                     MERGE (p)-[:HAS_QUESTION]->(k:_RAGQuestion {expertise: $expertise_name, pattern: $pattern_name, name: $question_name, question: $question, language: $language})
                     SET k.embedding = $embedding
                 '''
-                embedding = await embeddings.aembed_query(question.question)
+                embedding = await embeddings_model.aembed_query(question.question)
                 await txn.run(query=query, parameters={
                     'expertise_name': config.metadata.name,
                     'pattern_name': pattern.name,
@@ -159,9 +160,9 @@ async def delete_expertise(request: fastapi.Request, identifier: str) -> model.M
         DETACH DELETE q
         DETACH DELETE n
         '''
-        result = await txn.run(query=query, parameters={'name': identifier})
+        await txn.run(query=query, parameters={'name': identifier})
     session: neo4j.AsyncSession = await db.session(request)
-    result = await session.execute_write(_job)
+    await session.execute_write(_job)
     return {
         'msg': f'Deleted {identifier}'
     }

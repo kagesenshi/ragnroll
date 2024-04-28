@@ -4,6 +4,7 @@ import yaml.parser
 from . import model
 from . import db
 from . import settings
+from .langchain import chat_model, embeddings_model
 import neo4j
 import neo4j.exceptions
 import typing
@@ -61,8 +62,8 @@ def jsonify_result(data: typing.Any, **kwargs):
 
 class QueryCorrector(object):
 
-    def __init__(self, session: neo4j.AsyncSession, chat: ChatOpenAI, retries=3) -> None:
-        self.chain = prompt.cypher_corrector | chat 
+    def __init__(self, session: neo4j.AsyncSession, retries=3) -> None:
+        self.chain = prompt.cypher_corrector | chat_model
         self.session = session
         self.retries = retries
 
@@ -133,36 +134,40 @@ async def find_queries(session: neo4j.AsyncSession,
 
     return sorted([SearchOutput(**o) for o in outputs.values()], key=lambda o: o.order)
 
-async def generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpenAI, question: str, 
-                                      samples: list[OutputQuery], result_limit: int = 20):
-    print(format_text("> Entering intent based query generator", bold=True))
-    print(format_text("> Sample queries:", bold=True))
-    for s in samples:
-        print(format_text(s.query, color='yellow'))
-    chain = prompt.rag_query_generator | chat 
-    limit_chain = prompt.limit_replacer | chat 
-    message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
-            f"Question: {sample.question}\nQuery: {sample.query}" for sample in samples
-        ]), 'question': question, 'result_limit': result_limit})
-    query = message.content
+async def enforce_limit(query: str, result_limit: int = 20):
+    limit_chain = prompt.limit_replacer | chat_model
     query = query.strip()
     if query.endswith(';'):
         query = query[:-1]
     if 'limit ' not in query.lower():
         query = query + f' LIMIT {result_limit};'
+    limits = re.findall(r'limit *(\d+)', query.lower())
+    if limits:
+        limit = 0
+        try:
+            limit = int(limits[-1])
+        except ValueError: 
+            pass
+        if limit > result_limit:
+            print(format_text(f"> Limit exceeds {result_limit}. Replacing limit", bold=True))
+            message: BaseMessage = await limit_chain.ainvoke({'result_limit': result_limit, 'query': query})
+            query = message.content
+    return query
+
+async def generate_query_from_sample(session: neo4j.AsyncSession, question: str, 
+                                      samples: list[OutputQuery], result_limit: int = 20):
+    print(format_text("> Entering intent based query generator", bold=True))
+    print(format_text("> Sample queries:", bold=True))
+    for s in samples:
+        print(format_text(s.query, color='yellow'))
+    chain = prompt.rag_query_generator | chat_model
+    message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
+            f"Question: {sample.question}\nQuery: {sample.query}" for sample in samples
+        ]), 'question': question, 'result_limit': result_limit})
+    query = message.content
     if query != 'IDONOTKNOW':
-        limits = re.findall(r'limit *(\d+)', query.lower())
-        if limits:
-            limit = 0
-            try:
-                limit = int(limits[-1])
-            except ValueError: 
-                pass
-            if limit > result_limit:
-                print(format_text(f"> Limit exceeds {result_limit}. Replacing limit", bold=True))
-                message: BaseMessage = await limit_chain.ainvoke({'result_limit': result_limit, 'query': query})
-                query = message.content
-        query_corrector = QueryCorrector(session, chat=chat)
+        query = await enforce_limit(query, result_limit=result_limit)
+        query_corrector = QueryCorrector(session)
         query = await query_corrector(query)
     else:
         return None
@@ -170,10 +175,10 @@ async def generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpen
     print(format_text(query, color='yellow'))
     return query
 
-async def fetch_output(output: SearchOutput, question: str, chat: ChatOpenAI, driver: neo4j.AsyncDriver, result_limit: int = 20):
-    answer_chain = CYPHER_QA_PROMPT | chat 
+async def fetch_output(output: SearchOutput, question: str, driver: neo4j.AsyncDriver, result_limit: int = 20):
+    answer_chain = CYPHER_QA_PROMPT | chat_model
     async with driver.session() as session:
-        query = await generate_query_from_sample(session, chat, question, output.queries, result_limit=result_limit)
+        query = await generate_query_from_sample(session, question, output.queries, result_limit=result_limit)
     if not query:
         return None
     
@@ -201,25 +206,21 @@ async def fetch_output(output: SearchOutput, question: str, chat: ChatOpenAI, dr
         result['axes'] = {'x': cols[0], 'y': cols[1]}
     return model.SearchResultItem(**result)
    
-async def answer_question(request: fastapi.Request, question: str, 
-                           embedding: typing.Optional[list[float]] = None, result_limit: int = 20
+async def answer_question(question: str, 
+                           driver: neo4j.AsyncDriver,
+                           embedding: typing.Optional[list[float]] = None, result_limit: int = 20,
                            ) -> list[model.SearchResultItem]:
     
     print(format_text(f"> Answering question: '{question}'", bold=True))
-    chat = ChatOpenAI()
-
-    driver: neo4j.AsyncDriver = db.connect(request)
-
     if embedding is None:
         print(format_text("> Entering embedding calculation", bold=True))
-        embeddings = OpenAIEmbeddings()
-        embedding = await embeddings.aembed_query(question)
+        embedding = await embeddings_model.aembed_query(question)
         print(format_text("> Embedding done", bold=True))
 
     async with driver.session() as session:
         outputs = await find_queries(session, embedding)
 
-    result_promises = [fetch_output(o, question, chat, driver, result_limit=result_limit) for o in outputs]
+    result_promises = [fetch_output(o, question, driver, result_limit=result_limit) for o in outputs]
 
     if settings.DEBUG:
         result: list[model.SearchResultItem] = [await p for p in result_promises]
@@ -228,13 +229,28 @@ async def answer_question(request: fastapi.Request, question: str,
 
     return sorted([r for r in result if r], key=lambda r: r.order)
 
-async def default_search(question: str, driver: neo4j.AsyncDriver, chat: ChatOpenAI):
-    generator_chain = CYPHER_GENERATION_PROMPT | chat
+async def default_search(question: str, driver: neo4j.AsyncDriver, result_limit:int = 20) -> list[model.SearchResultItem]:
+    generator_chain = CYPHER_GENERATION_PROMPT | chat_model
     print(format_text(f"> Generating answer to '{question}' using default strategy", bold=True))
     query_msg: BaseMessage = await generator_chain.ainvoke({'question': question, 'schema': construct_schema(Neo4jGraph().get_structured_schema, [], [])})
     query = query_msg.content
+    query = await enforce_limit(query, result_limit=result_limit)
     async with driver.session() as session:
-        query_corrector = QueryCorrector(session, chat=chat)
-    query = await query_corrector(query)
+        query_corrector = QueryCorrector(session)
+        query = await query_corrector(query)
     print(format_text(f"> Generated query:", bold=True))
     print(format_text(query, color='yellow'))
+    async with driver.session() as session:
+        data = await (await session.run(query)).data()
+    if not data:
+        return None 
+    answer_chain = CYPHER_QA_PROMPT | chat_model
+    answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
+    snippet = answer.content
+    return [
+        model.SearchResultItem(
+            data=[{'answer': snippet}], 
+            queries=[model.SearchQueryMeta(query=query, result=jsonify_result(data))], 
+            visualization=model.VisualizationType.TEXT_ANSWER,
+            fields=['answer'])
+    ]
