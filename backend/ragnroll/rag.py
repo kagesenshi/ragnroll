@@ -29,6 +29,7 @@ import yaml
 import yaml.parser
 import openai
 import os
+import re
 
 class CypherChainOutput(typing.TypedDict):
     query: str 
@@ -80,16 +81,19 @@ class QueryCorrector(object):
             retry += 1
         return None
 
+
 class OutputQuery(pydantic.BaseModel):
     question: str 
     query: str
-    output: str
-    visualization: model.VisualizationType
     score: float
+
+class SearchOutput(pydantic.BaseModel):
+    visualization: model.VisualizationType
+    queries: list[OutputQuery]
     order: int = 0
 
 async def find_queries(session: neo4j.AsyncSession,
-                        embedding: list[float]) -> list[OutputQuery]:
+                        embedding: list[float]) -> list[SearchOutput]:
     async def _job(txn: neo4j.AsyncTransaction):
         count = 5
         min_score = 0.9
@@ -109,26 +113,55 @@ async def find_queries(session: neo4j.AsyncSession,
         return queries
     
     matches = await session.execute_read(_job)
-    matches = [OutputQuery(question=m['question']['question'], 
+    outputs = {}
+    for m in matches:
+        output_name = m['output']['name']
+        default_item = dict(
+            name=output_name,
+            queries=[],
+            visualization=m['output']['visualization'],
+            order=m['output']['order']
+        )
+        outputs.setdefault(output_name, default_item)
+        outputs[output_name]['queries'].append(
+            OutputQuery(
+                question=m['question']['question'],
                 query=m['query']['query'],
-                output=m['output']['name'],
-                visualization=m['output']['visualization'],
-                order=m['output']['order'],
-                score=m['score']) for m in matches]
-    return matches
+                score=m['score']
+            )
+        )
+
+    return sorted([SearchOutput(**o) for o in outputs.values()], key=lambda o: o.order)
 
 async def generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpenAI, question: str, 
-                                      samples: list[OutputQuery]):
+                                      samples: list[OutputQuery], result_limit: int = 20):
     print(format_text("> Entering intent based query generator", bold=True))
     print(format_text("> Sample queries:", bold=True))
     for s in samples:
         print(format_text(s.query, color='yellow'))
     chain = prompt.rag_query_generator | chat 
+    limit_chain = prompt.limit_replacer | chat 
     message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
             f"Question: {sample.question}\nQuery: {sample.query}" for sample in samples
-        ]), 'question': question})
+        ]), 'question': question, 'result_limit': result_limit})
     query = message.content
+    query = query.strip()
+    if query.endswith(';'):
+        query = query[:-1]
+    if 'limit ' not in query.lower():
+        query = query + f' LIMIT {result_limit};'
     if query != 'IDONOTKNOW':
+        limits = re.findall(r'limit *(\d+)', query.lower())
+        if limits:
+            limit = 0
+            try:
+                limit = int(limits[-1])
+            except ValueError: 
+                pass
+            if limit > result_limit:
+                print(format_text(f"> Limit exceeds {result_limit}. Replacing limit", bold=True))
+                message: BaseMessage = await limit_chain.ainvoke({'result_limit': result_limit, 'query': query})
+                query = message.content
         query_corrector = QueryCorrector(session, chat=chat)
         query = await query_corrector(query)
     else:
@@ -137,18 +170,13 @@ async def generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpen
     print(format_text(query, color='yellow'))
     return query
 
-async def fetch_output(output: OutputQuery, question: str, chat: ChatOpenAI, driver: neo4j.AsyncDriver, result_limit: int = 50):
+async def fetch_output(output: SearchOutput, question: str, chat: ChatOpenAI, driver: neo4j.AsyncDriver, result_limit: int = 20):
     answer_chain = CYPHER_QA_PROMPT | chat 
     async with driver.session() as session:
-        query = await generate_query_from_sample(session, chat, question, [output])
+        query = await generate_query_from_sample(session, chat, question, output.queries, result_limit=result_limit)
     if not query:
         return None
     
-    query = query.strip()
-    if query.endswith(';'):
-        query = query[:-1]
-    if 'limit ' not in query.lower():
-        query = query + f' LIMIT {result_limit};'
     async with driver.session() as session:
         data = await (await session.run(query)).data()
     if not data:
@@ -157,13 +185,10 @@ async def fetch_output(output: OutputQuery, question: str, chat: ChatOpenAI, dri
     result = {"queries": [{"query": query, "result": jsonify_result(data, indent=4)}],
               'visualization': visualization, 'order': output.order}
     if visualization == model.VisualizationType.TEXT_ANSWER:
-        try:
-            answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
-            snippet = answer.content
-            result['data'] = [{'answer': snippet}]
-            result['fields'] = ['answer']
-        except openai.BadRequestError as e:
-            pass
+        answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
+        snippet = answer.content
+        result['data'] = [{'answer': snippet}]
+        result['fields'] = ['answer']
     elif visualization == model.VisualizationType.TABLE:
         result['data'] = data
         result['fields'] = list(data[0].keys())
@@ -177,7 +202,7 @@ async def fetch_output(output: OutputQuery, question: str, chat: ChatOpenAI, dri
     return model.SearchResultItem(**result)
    
 async def answer_question(request: fastapi.Request, question: str, 
-                           embedding: typing.Optional[list[float]] = None, result_limit: int = 50
+                           embedding: typing.Optional[list[float]] = None, result_limit: int = 20
                            ) -> list[model.SearchResultItem]:
     
     print(format_text(f"> Answering question: '{question}'", bold=True))

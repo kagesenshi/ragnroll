@@ -23,7 +23,7 @@ rag_query_generator = ChatPromptTemplate.from_messages([
             question. Take note that the query example is ALREADY CORRECT, you only need to update
             the parameters to correct values. DO NOT alter number of relationship hops. Return ONLY the 
             cypher query and nothing else. 
-
+    Step 4: Generated query should NOT return more than {result_limit} results.
  
     Rules: 
     - The provided example queries provide the best method to answer the question, you can only change parameters
@@ -39,6 +39,13 @@ rag_query_generator = ChatPromptTemplate.from_messages([
     {data}
     '''),
     ('user', '''{question}''')
+])
+
+limit_replacer = ChatPromptTemplate.from_messages([
+    ('system', '''
+    Replace the limit clause in the provided cypher query to {result_limit}
+    '''),
+    ('user', '{query}')
 ])
 
 cypher_corrector = ChatPromptTemplate.from_messages([
