@@ -3,6 +3,8 @@ import enum
 import typing
 import neo4j
 
+NAME_PATTERN=r'^[a-z0-9\-]*$'
+
 T = typing.TypeVar('T', bound=pydantic.BaseModel)
 
 class SearchParam(pydantic.BaseModel):
@@ -34,21 +36,31 @@ class Language(enum.StrEnum):
     ms_MY = 'ms_MY'
 
 class RAGQuestion(pydantic.BaseModel):
+    name: str = pydantic.Field(strict=True, pattern=NAME_PATTERN, default='default')
     question: str 
     language: Language = Language.en_US
 
-class RAGAnswer(pydantic.BaseModel):
+class NameReference(pydantic.BaseModel):
+    name: str = pydantic.Field(strict=True, pattern=NAME_PATTERN)
+
+class RAGQuery(pydantic.BaseModel):
+    questions: list[NameReference]  = pydantic.Field(default_factory=lambda : [NameReference(name='default')])
     query: str 
+
+class RAGOutput(pydantic.BaseModel):
+    name: str = pydantic.Field(strict=True, pattern=NAME_PATTERN)
     visualization: VisualizationType = VisualizationType.TEXT_ANSWER
+    samples: list[RAGQuery]
+    order: int = 0
 
 class RAGPattern(pydantic.BaseModel):
-    name: str = pydantic.StringConstraints(strip_whitespace=True, strict=True, pattern=r'^[a-z0-9\-]*$')
+    name: str = pydantic.Field(strict=True, pattern=NAME_PATTERN)
     questions: list[RAGQuestion]
-    answers: list[RAGAnswer]
+    outputs: list[RAGOutput]
 
 
 class ConfigMetadata(pydantic.BaseModel):
-    name: str = pydantic.StringConstraints(strip_whitespace=True, strict=True, pattern=r'^[a-z0-9\-]*$')
+    name: str = pydantic.Field(strict=True, pattern=NAME_PATTERN)
 
 class RAGExpertiseSpec(pydantic.BaseModel):
     patterns: list[RAGPattern]    
@@ -75,6 +87,7 @@ class SearchResultItem(pydantic.BaseModel):
     visualization: VisualizationType
     fields: list[str]
     axes: Axes = pydantic.Field(default_factory=Axes)
+    order: int = 0
  
 class SearchResult(pydantic.BaseModel):
     data: list[SearchResultItem]

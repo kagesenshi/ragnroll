@@ -13,6 +13,7 @@ import neo4j.time
 import neo4j.graph
 import yaml
 import yaml.parser
+import pydantic
 from .rag import answer_question
 
 app = fastapi.FastAPI(title="RAG'n'Roll")
@@ -23,30 +24,8 @@ async def _search(request: fastapi.Request, question: str) -> model.SearchResult
     embeddings = OpenAIEmbeddings()
     embedding = await embeddings.aembed_query(question)
     print(format_text("> Embedding done", bold=True))
-
-    answer_promises = []
-    for v in model.VisualizationType:
-        opts = dict(
-            request=request,
-            question=question,
-            embedding=embedding,
-            visualization=v
-        )
-        if v == model.VisualizationType.TEXT_ANSWER:
-            opts['fallback'] = True 
-        answer_promises.append(answer_question(**opts))
-
-    if settings.DEBUG:
-        answers = [await p for p in answer_promises]
-    else:
-        answers = await asyncio.gather(*answer_promises)
-
-    result = {
-        'data': [],
-        'meta': {}
-    }
-    result['data'] = [a for a in answers if a]
-    return result
+    answers = await answer_question(request, question, embedding)
+    return model.SearchResult(data=answers)
 
 # Search
 @app.get("/search", response_model_exclude_none=True, response_model_exclude_unset=True)
@@ -85,11 +64,14 @@ async def upload_expertise(request: fastapi.Request):
         query = '''
         MATCH (n:_RAGExpertise {name: $name})
         OPTIONAL MATCH (n)-[]-(p:_RAGPattern)
-        OPTIONAL MATCH (p)-[]-(q:_RAGQuery)
-        OPTIONAL MATCH (q)-[]-(k:_RAGQuestion)
+        OPTIONAL MATCH (p)-[]-(o:_RAGOutput)
+        OPTIONAL MATCH (o)-[]-(q:_RAGQuery)
+        OPTIONAL MATCH (p)-[]-(k:_RAGQuestion)
+        DETACH DELETE o
         DETACH DELETE k
         DETACH DELETE q
         DETACH DELETE n
+        DETACH DELETE p
         '''
         result = await txn.run(query, parameters={
             'name': config.metadata.name
@@ -107,33 +89,61 @@ async def upload_expertise(request: fastapi.Request):
         })
 
         for pattern in config.spec.patterns:
-            for answer in pattern.answers:
-                query = '''
-                    MATCH (n:_RAGExpertise {name: $name})
-                    MERGE (p:_RAGPattern {name: $pattern_name})
-                    MERGE (n)-[:CONTAINS]->(p)
-                    MERGE (p)-[:CONTAINS]->(q:_RAGQuery {query: $query, visualization: $visualization})
-                '''
-                result = await txn.run(query=query, parameters={
-                    'name': config.metadata.name,
-                    'pattern_name': pattern.name,
-                    'query': answer.query,
-                    'visualization': answer.visualization
-                })
+            query = '''
+                MERGE (n:_RAGExpertise {name: $expertise_name})
+                MERGE (p:_RAGPattern {expertise: $expertise_name, name: $pattern_name})
+                MERGE (n)-[:HAS_PATTERN]-(p)
+            '''
+            await txn.run(query=query, parameters={
+                'expertise_name': config.metadata.name,
+                'pattern_name': pattern.name,
+            })
             for question in pattern.questions:
                 query = '''
-                    MATCH (n:_RAGExpertise {name: $name})-[:CONTAINS]->(p:_RAGPattern {name: $pattern_name})
-                    MERGE (p)-[:CONTAINS]->(k:_RAGQuestion {question: $question, language: $language})
+                    MATCH (p:_RAGPattern {expertise: $expertise_name, name: $pattern_name})
+                    MERGE (p)-[:HAS_QUESTION]->(k:_RAGQuestion {expertise: $expertise_name, pattern: $pattern_name, name: $question_name, question: $question, language: $language})
                     SET k.embedding = $embedding
                 '''
                 embedding = await embeddings.aembed_query(question.question)
-                result = await txn.run(query=query, parameters={
-                    'name': config.metadata.name,
+                await txn.run(query=query, parameters={
+                    'expertise_name': config.metadata.name,
                     'pattern_name': pattern.name,
+                    'question_name': question.name,
                     'question': question.question,
                     'language': question.language,
                     'embedding': embedding
                 })
+            for output in pattern.outputs:
+                for sample in output.samples:
+                    query = '''
+                        MATCH (p:_RAGPattern {expertise: $expertise_name, name: $pattern_name})
+                        MERGE (o:_RAGOutput {expertise: $expertise_name, pattern: $pattern_name, name: $output_name})
+                        MERGE (o)-[:HAS_QUERY]->(q:_RAGQuery {expertise: $expertise_name, pattern: $pattern_name, output: $output_name, query: $query})
+                        MERGE (p)-[:HAS_OUTPUT]->(o)
+                        SET o.visualization = $visualization
+                        SET o.order = $order
+                    '''
+                    await txn.run(query=query, parameters={
+                        'expertise_name': config.metadata.name,
+                        'pattern_name': pattern.name,
+                        'output_name': output.name,
+                        'query': sample.query,
+                        'visualization': output.visualization,
+                        'order': output.order
+                    })
+                    for question in sample.questions:
+                        query = '''
+                            MATCH (question:_RAGQuestion {expertise: $expertise_name, pattern: $pattern_name, name: $question_name})
+                            MATCH (query:_RAGQuery {expertise: $expertise_name, pattern: $pattern_name, output: $output_name, query: $query})
+                            MERGE (query)-[:ANSWERS]->(question)
+                        '''
+                        await txn.run(query=query, parameters={
+                            'expertise_name': config.metadata.name,
+                            'pattern_name': pattern.name,
+                            'question_name': question.name,
+                            'output_name': output.name,
+                            'query': sample.query
+                        })
     result = await session.execute_write(_job)
     return fastapi.responses.RedirectResponse(url=f'/expertise/{config.metadata.name}')
 
@@ -173,3 +183,11 @@ async def http_exc(exc: fastapi.HTTPException):
         }
     )
 
+@app.exception_handler(pydantic.ValidationError)
+async def pydantic_validation_exc(conn, exc: pydantic.ValidationError):
+    return fastapi.responses.JSONResponse(
+        status_code=422,
+        content={
+            'detail': exc.errors()
+        }
+    )

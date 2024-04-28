@@ -80,14 +80,16 @@ class QueryCorrector(object):
             retry += 1
         return None
 
-class QuerySample(pydantic.BaseModel):
+class OutputQuery(pydantic.BaseModel):
     question: str 
     query: str
+    output: str
     visualization: model.VisualizationType
     score: float
+    order: int = 0
 
 async def find_queries(session: neo4j.AsyncSession,
-                        embedding: list[float]) -> list[QuerySample]:
+                        embedding: list[float]) -> list[OutputQuery]:
     async def _job(txn: neo4j.AsyncTransaction):
         count = 5
         min_score = 0.9
@@ -97,8 +99,9 @@ async def find_queries(session: neo4j.AsyncSession,
             WITH node, score
                WHERE '_RAGQuestion' in labels(node)
                AND score > $min_score
-            MATCH (query:_RAGQuery)-[:CONTAINS]-(p:_RAGPattern)-[:CONTAINS]-(node)
-            RETURN distinct query, node as question, score
+            MATCH (query:_RAGQuery)-[:ANSWERS]-(node)
+            MATCH (query)-[HAS_OUTPUT]-(output:_RAGOutput)
+            RETURN distinct query, node as question, output, score
            ''' 
         res = await txn.run(cypher, parameters={'embedding': embedding, 'count': count, 
                                                 'min_score': min_score})
@@ -106,14 +109,16 @@ async def find_queries(session: neo4j.AsyncSession,
         return queries
     
     matches = await session.execute_read(_job)
-    matches = [QuerySample(question=m['question']['question'], 
+    matches = [OutputQuery(question=m['question']['question'], 
                 query=m['query']['query'],
-                visualization=m['query']['visualization'],
+                output=m['output']['name'],
+                visualization=m['output']['visualization'],
+                order=m['output']['order'],
                 score=m['score']) for m in matches]
     return matches
 
 async def generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpenAI, question: str, 
-                                      samples: list[QuerySample]):
+                                      samples: list[OutputQuery]):
     print(format_text("> Entering intent based query generator", bold=True))
     print(format_text("> Sample queries:", bold=True))
     for s in samples:
@@ -132,46 +137,10 @@ async def generate_query_from_sample(session: neo4j.AsyncSession, chat: ChatOpen
     print(format_text(query, color='yellow'))
     return query
 
-async def answer_question(request: fastapi.Request, question: str, 
-                           embedding: typing.Optional[list[float]] = None, result_limit: int = 50,
-                        visualization: model.VisualizationType = model.VisualizationType.TEXT_ANSWER,
-                        fallback: bool = False):
-    
-    print(format_text(f"> Answering question: '{question}' AS {visualization}", bold=True))
-    chat = ChatOpenAI()
-
+async def fetch_output(output: OutputQuery, question: str, chat: ChatOpenAI, driver: neo4j.AsyncDriver, result_limit: int = 50):
     answer_chain = CYPHER_QA_PROMPT | chat 
-
-    generator_chain = CYPHER_GENERATION_PROMPT | chat
-    driver: neo4j.AsyncDriver = db.connect(request)
-    session: neo4j.AsyncSession = driver.session()
-
-    if embedding is None:
-        print(format_text("> Entering embedding calculation", bold=True))
-        embeddings = OpenAIEmbeddings()
-        embedding = await embeddings.aembed_query(question)
-        print(format_text("> Embedding done", bold=True))
-
-    queries = await find_queries(session, embedding)
-    matches = [m for m in queries if m.visualization == visualization]
-    other_matches = [m for m in queries if m.visualization != visualization]
-    if not matches and fallback and other_matches:
-        # do not fallback if there's matches in other types
-        return None
-    
-    query = None
-    if matches:
-        query = await generate_query_from_sample(session, chat, question, matches)
-
-    if not query and fallback:
-        print(format_text("> No query sample found, generating using default strategy", bold=True))
-        query_msg: BaseMessage = await generator_chain.ainvoke({'question': question, 'schema': construct_schema(Neo4jGraph().get_structured_schema, [], [])})
-        query = query_msg.content
-        query_corrector = QueryCorrector(session, chat=chat)
-        query = await query_corrector(query)
-        print(format_text(f"> Generated query:", bold=True))
-        print(format_text(query, color='yellow'))
-
+    async with driver.session() as session:
+        query = await generate_query_from_sample(session, chat, question, [output])
     if not query:
         return None
     
@@ -184,8 +153,9 @@ async def answer_question(request: fastapi.Request, question: str,
         data = await (await session.run(query)).data()
     if not data:
         return None 
+    visualization = output.visualization
     result = {"queries": [{"query": query, "result": jsonify_result(data, indent=4)}],
-              'visualization': visualization}
+              'visualization': visualization, 'order': output.order}
     if visualization == model.VisualizationType.TEXT_ANSWER:
         try:
             answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
@@ -204,5 +174,42 @@ async def answer_question(request: fastapi.Request, question: str,
         result['data'] = data
         result['fields'] = cols
         result['axes'] = {'x': cols[0], 'y': cols[1]}
-    return result
+    return model.SearchResultItem(**result)
+   
+async def answer_question(request: fastapi.Request, question: str, 
+                           embedding: typing.Optional[list[float]] = None, result_limit: int = 50
+                           ) -> list[model.SearchResultItem]:
+    
+    print(format_text(f"> Answering question: '{question}'", bold=True))
+    chat = ChatOpenAI()
 
+    driver: neo4j.AsyncDriver = db.connect(request)
+
+    if embedding is None:
+        print(format_text("> Entering embedding calculation", bold=True))
+        embeddings = OpenAIEmbeddings()
+        embedding = await embeddings.aembed_query(question)
+        print(format_text("> Embedding done", bold=True))
+
+    async with driver.session() as session:
+        outputs = await find_queries(session, embedding)
+
+    result_promises = [fetch_output(o, question, chat, driver, result_limit=result_limit) for o in outputs]
+
+    if settings.DEBUG:
+        result: list[model.SearchResultItem] = [await p for p in result_promises]
+    else:
+        result: list[model.SearchResultItem] = await asyncio.gather(*result_promises)
+
+    return sorted([r for r in result if r], key=lambda r: r.order)
+
+async def default_search(question: str, driver: neo4j.AsyncDriver, chat: ChatOpenAI):
+    generator_chain = CYPHER_GENERATION_PROMPT | chat
+    print(format_text(f"> Generating answer to '{question}' using default strategy", bold=True))
+    query_msg: BaseMessage = await generator_chain.ainvoke({'question': question, 'schema': construct_schema(Neo4jGraph().get_structured_schema, [], [])})
+    query = query_msg.content
+    async with driver.session() as session:
+        query_corrector = QueryCorrector(session, chat=chat)
+    query = await query_corrector(query)
+    print(format_text(f"> Generated query:", bold=True))
+    print(format_text(query, color='yellow'))

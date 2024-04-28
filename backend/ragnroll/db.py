@@ -3,6 +3,10 @@ import fastapi
 import neo4j
 
 def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
+    existing = getattr(request.state, 'neo4j_connection', None)
+    if existing:
+        return existing
+
     params = dict(
         uri=settings.NEO4J_URI,
         database=settings.NEO4J_DATABASE,
@@ -27,7 +31,9 @@ def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
         else:
             raise fastapi.HTTPException(status_code=401, detail='Neither database login configured nor authorization header provided')
 
-    return neo4j.AsyncGraphDatabase.driver(**params)
+    driver = neo4j.AsyncGraphDatabase.driver(**params)
+    request.state.neo4j_connection = driver
+    return driver
 
 async def session(request: fastapi.Request) -> neo4j.AsyncSession:
     return connect(request).session()
