@@ -199,6 +199,8 @@ async def answer_question(request: fastapi.Request, question: str,
         result['fields'] = list(data[0].keys())
     elif visualization == model.VisualizationType.BAR_CHART:
         cols = list(data[0].keys())
+        if len(cols) < 2:
+            return None
         result['data'] = data
         result['fields'] = cols
         result['axes'] = {'x': cols[0], 'y': cols[1]}
