@@ -1,7 +1,7 @@
 version: '3.7'
 services:
   devcontainer:
-    userns_mode: keep-id:uid=1000,gid=1000
+    #userns_mode: keep-id:uid=1000,gid=1000
     image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9-0.1.0
     command: tail -f /dev/null
     environment:
@@ -11,13 +11,13 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
     volumes: 
       - ..:/workspace:cached
-      - ~/.cache:/home/user/.cache
+      - ~/.cache:/root/.cache
     ports:
       - 8000:8000
       - 5000:5000
       - 3000:3000
   neo4j:
-    userns_mode: keep-id:uid=7474,gid=7474
+    #userns_mode: keep-id:uid=7474,gid=7474
     image: docker.io/neo4j:5.18.0-community-ubi9
     environment:
       - NEO4J_apoc_export_file_enabled=true
@@ -30,8 +30,12 @@ services:
       - 7474:7474
       - 7687:7687
     volumes:
-      - ./neo4j-data:/data
+      - neo4j-data:/data
       - ./neo4j-import:/var/lib/neo4j/import
       - ./neo4j-logs:/logs
     tmpfs:
       - /var/lib/neo4j/run/
+volumes:
+  neo4j-data:
+  neo4j-import:
+  neo4j-logs:
