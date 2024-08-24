@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Izhar Firdaus <kagesenshi.87@gmail.com>"]
 readme = "README.md"
-packages = [{include = "ragnroll_web"}]
+packages = [{include = "ragnroll"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"

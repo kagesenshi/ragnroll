@@ -12,7 +12,7 @@
             "envFile": "${workspaceFolder}/.env",
             "args": ["run"],
             "console": "internalConsole",
-            "cwd": "${workspaceFolder}/ragnroll_web/",
+            "cwd": "${workspaceFolder}/ragnroll/",
             "subProcess": false,
             "presentation": {
                 "hidden": true,

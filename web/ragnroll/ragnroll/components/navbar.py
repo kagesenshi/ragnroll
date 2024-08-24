@@ -1,6 +1,6 @@
 import reflex as rx
 
-from ragnroll_web.state import State
+from ragnroll.state import State
 
 def navbar() -> rx.Component:
     return rx.hstack(

@@ -2,7 +2,7 @@
 
 from rxconfig import config
 
-from ragnroll_web.components import (
+from ragnroll.components import (
     navbar,
     text_snippet,
     table_snippet,
