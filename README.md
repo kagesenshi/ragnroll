@@ -21,7 +21,7 @@ TODO:
 This whole repository is built with VSCode Devcontainer with docker-compose. Load
 it up using VSCode and the build process should be automatic.
 
-After the environment is up, create `backend/.env` file and put in `OPENAI_API_KEY=<apikey>`
+After the environment is up, create `.env` file and put in `OPENAI_API_KEY=<apikey>`
 
 Tested on Fedora 39
 
@@ -33,6 +33,6 @@ to run the FastAPI Backend.
 ## Access points
 
 - `http://localhost:3000` - Reflex Web UI
-- `http://localhost:8000` - Reflex Websocket
-- `http://localhost:5000/docs` - FastAPI Backend
+- `http://localhost:8000` - Reflex FastAPI Backend
+- `http://localhost:8000/docs` - Backend API docs
 - `http://localhost;7474` - Neo4j browser
