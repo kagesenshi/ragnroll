@@ -30,7 +30,7 @@ class State(rx.State):
         yield
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(f'{settings.BACKEND_URI}/search', params={'question': form_data['question']})
+                response = await client.get(f'{settings.API_URL}/search', params={'question': form_data['question']})
                 data = response.json()
             self.search_results = [SearchResultItem(**d) for d in data['data']]
         except httpx.ReadTimeout:

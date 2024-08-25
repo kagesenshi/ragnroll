@@ -18,7 +18,7 @@ from langchain_community.chains.graph_qa.prompts import CYPHER_GENERATION_PROMPT
 from langchain_community.chains.graph_qa.cypher import construct_schema
 from langchain_core.runnables.base import RunnableSerializable
 from langchain_community.chains.graph_qa.cypher import extract_cypher
-from .util import format_text
+from .util import cprint
 from langchain_community.graphs import Neo4jGraph
 import json
 import asyncio
@@ -74,9 +74,9 @@ class QueryCorrector(object):
                 res = await self.session.run(f'EXPLAIN {query}')
                 return query
             except (neo4j.exceptions.CypherSyntaxError) as e:
-                print(format_text("> Correcting query: ", bold=True))
-                print(format_text(query, color='yellow'))
-                print(format_text(e.message, color='red'))
+                cprint("> Correcting query: ", bold=True)
+                cprint(query, color='yellow')
+                cprint(e.message, color='red')
                 message: BaseMessage = await self.chain.ainvoke({'query': query, 'error': e.message})
                 query = extract_cypher(message.content)
             retry += 1
@@ -149,17 +149,17 @@ async def enforce_limit(query: str, result_limit: int = 20):
         except ValueError: 
             pass
         if limit > result_limit:
-            print(format_text(f"> Limit exceeds {result_limit}. Replacing limit", bold=True))
+            cprint(f"> Limit exceeds {result_limit}. Replacing limit", bold=True)
             message: BaseMessage = await limit_chain.ainvoke({'result_limit': result_limit, 'query': query})
             query = message.content
     return query
 
 async def generate_query_from_sample(session: neo4j.AsyncSession, question: str, 
                                       samples: list[OutputQuery], result_limit: int = 20):
-    print(format_text("> Entering intent based query generator", bold=True))
-    print(format_text("> Sample queries:", bold=True))
+    cprint("> Entering intent based query generator", bold=True)
+    cprint("> Sample queries:", bold=True)
     for s in samples:
-        print(format_text('> ' + s.query, color='yellow'))
+        cprint('> ' + s.query, color='yellow')
     chain = prompt.rag_query_generator | chat_model
     message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
             f"Question: {sample.question}\nQuery: {sample.query}" for sample in samples
@@ -171,8 +171,8 @@ async def generate_query_from_sample(session: neo4j.AsyncSession, question: str,
         query = await query_corrector(query)
     else:
         return None
-    print(format_text(f"> Generated query:", bold=True))
-    print(format_text(query, color='yellow'))
+    cprint(f"> Generated query:", bold=True)
+    cprint(query, color='yellow')
     return query
 
 async def fetch_output(output: SearchOutput, question: str, driver: neo4j.AsyncDriver, result_limit: int = 20):
@@ -212,11 +212,11 @@ async def answer_question(question: str,
                            embedding: typing.Optional[list[float]] = None, result_limit: int = 20,
                            ) -> list[model.SearchResultItem]:
     
-    print(format_text(f"> Answering question: '{question}'", bold=True))
+    cprint(f"> Answering question: '{question}'", bold=True)
     if embedding is None:
-        print(format_text("> Entering embedding calculation", bold=True))
+        cprint("> Entering embedding calculation", bold=True)
         embedding = await embeddings_model.aembed_query(question)
-        print(format_text("> Embedding done", bold=True))
+        cprint("> Embedding done", bold=True)
 
     async with driver.session() as session:
         outputs = await find_queries(session, embedding)
@@ -229,20 +229,22 @@ async def answer_question(question: str,
         result: list[model.SearchResultItem] = await asyncio.gather(*result_promises)
 
     if not result:
-        print(format_text("> No results found", bold=True, color="red"))
+        cprint("> No results found", bold=True, color="red")
+    else:
+        cprint("Found %s results" % len(result), bold=True, color="green")
     return sorted([r for r in result if r], key=lambda r: r.order)
 
 async def default_search(question: str, driver: neo4j.AsyncDriver, result_limit:int = 20) -> list[model.SearchResultItem]:
     generator_chain = CYPHER_GENERATION_PROMPT | chat_model
-    print(format_text(f"> Generating answer to '{question}' using default strategy", bold=True))
+    cprint(f"> Generating answer to '{question}' using default strategy", bold=True)
     query_msg: BaseMessage = await generator_chain.ainvoke({'question': question, 'schema': construct_schema(Neo4jGraph().get_structured_schema, [], [])})
     query = query_msg.content
     query = await enforce_limit(query, result_limit=result_limit)
     async with driver.session() as session:
         query_corrector = QueryCorrector(session)
         query = await query_corrector(query)
-    print(format_text(f"> Generated query:", bold=True))
-    print(format_text(query, color='yellow'))
+    cprint(f"> Generated query:", bold=True)
+    cprint(query, color='yellow')
     if not query:
         return []
     async with driver.session() as session:

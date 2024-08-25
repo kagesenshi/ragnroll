@@ -12,6 +12,9 @@ def format_text(text, *, color=None, bold=False):
         text = get_bolded_text(text)
     return text
 
+def cprint(text, *, color=None, bold=False):
+    print(format_text(text, color=color, bold=bold))
+
 S = typing.TypeVar('S', bound=pydantic.BaseModel)
 
 async def extract_model(schema: type[S], request: fastapi.Request) -> S:
