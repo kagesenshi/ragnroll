@@ -2,7 +2,7 @@ import reflex as rx
 import time
 import asyncio
 
-from ragnroll.state import State, SearchResultItem
+from ..state import State, SearchResultItem
 
 def text_snippet(result: SearchResultItem) -> rx.Component:
     queries = rx.foreach(

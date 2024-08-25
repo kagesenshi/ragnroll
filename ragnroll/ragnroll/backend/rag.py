@@ -72,7 +72,7 @@ class QueryCorrector(object):
         while retry < self.retries:
             try:
                 async def run(txn: neo4j.AsyncTransaction):
-                    return await txn.run(f'EXPLAIN {query}')
+                    return await (await txn.run(f'EXPLAIN {query}')).data()
                 res = await self.session.execute_read(run)
                 return query
             except (neo4j.exceptions.CypherSyntaxError) as e:
@@ -186,8 +186,8 @@ async def fetch_output(output: SearchOutput, question: str, driver: neo4j.AsyncD
     
     async with driver.session() as session:
         async def run(txn: neo4j.AsyncTransaction):
-            return await txn.run(query)
-        data = await (await session.execute_read(run)).data()
+            return await (await txn.run(query)).data()
+        data = await session.execute_read(run)
     if not data:
         return None 
     visualization = output.visualization
@@ -253,8 +253,8 @@ async def default_search(question: str, driver: neo4j.AsyncDriver, result_limit:
         return []
     async with driver.session() as session:
         async def run(txn: neo4j.AsyncTransaction):
-            return await txn.run(query)
-        data = await (await session.execute_read(run)).data()
+            return await (await txn.run(query)).data()
+        data = await session.execute_read(run)
     if not data:
         return []
     answer_chain = CYPHER_QA_PROMPT | chat_model
