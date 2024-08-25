@@ -14,10 +14,10 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages.base import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import GraphCypherQAChain
-from langchain.chains.graph_qa.prompts import CYPHER_GENERATION_PROMPT, CYPHER_QA_PROMPT
-from langchain.chains.graph_qa.cypher import construct_schema
+from langchain_community.chains.graph_qa.prompts import CYPHER_GENERATION_PROMPT, CYPHER_QA_PROMPT
+from langchain_community.chains.graph_qa.cypher import construct_schema
 from langchain_core.runnables.base import RunnableSerializable
-from langchain.chains.graph_qa.cypher import extract_cypher
+from langchain_community.chains.graph_qa.cypher import extract_cypher
 from .util import format_text
 from langchain_community.graphs import Neo4jGraph
 import json

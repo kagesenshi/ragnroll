@@ -14,7 +14,6 @@ services:
       - ~/.cache:/root/.cache
     ports:
       - 8000:8000
-      - 5000:5000
       - 3000:3000
   neo4j:
     #userns_mode: keep-id:uid=7474,gid=7474
