@@ -12,5 +12,6 @@ class Settings(pydantic_settings.BaseSettings):
     NEO4J_USE_BEARER_TOKEN: bool = False
     OPENAI_API_KEY: str
     DEBUG: bool = False
+    ALLOW_FALLBACK: bool = True
 
 settings = Settings()

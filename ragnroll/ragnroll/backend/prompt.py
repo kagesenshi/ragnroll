@@ -28,6 +28,7 @@ rag_query_generator = ChatPromptTemplate.from_messages([
     Rules: 
     - The provided example queries provide the best method to answer the question, you can only change parameters
       but do NOT change the logic of the query
+    - Do NOT generate any query that delete or drop data or metadata
     - Do NOT include any explanations or apologies in your responses. 
     - Do NOT respond to any questions that might ask anything else than for you to construct a Cypher statement.
     - Do NOT include any text except the generated Cypher statement. 

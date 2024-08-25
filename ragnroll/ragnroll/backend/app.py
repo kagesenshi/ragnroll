@@ -28,7 +28,7 @@ async def _search(request: fastapi.Request, question: str) -> model.SearchResult
     print(format_text("> Embedding done", bold=True))
     driver = db.connect(request)
     answers = await answer_question(question, embedding=embedding, driver=driver)
-    if not answers:
+    if not answers and settings.ALLOW_FALLBACK:
         answers = await default_search(question, driver=driver)
     return model.SearchResult(data=answers)
 
