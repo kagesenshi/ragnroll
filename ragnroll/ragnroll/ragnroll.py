@@ -1,8 +1,8 @@
 """Welcome to Reflex! This file outlines the steps to create a basic app."""
 
-from rxconfig import config
+from rxconfig import config # type: ignore
 
-from ragnroll.components import (
+from .components import (
     navbar,
     text_snippet,
     table_snippet,
@@ -81,4 +81,5 @@ def index() -> rx.Component:
 
 # Add state and page to the app.
 app = rx.App()
+from .backend.app import app as api_app
 # app.compile()

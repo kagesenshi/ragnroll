@@ -159,7 +159,7 @@ async def generate_query_from_sample(session: neo4j.AsyncSession, question: str,
     print(format_text("> Entering intent based query generator", bold=True))
     print(format_text("> Sample queries:", bold=True))
     for s in samples:
-        print(format_text(s.query, color='yellow'))
+        print(format_text('> ' + s.query, color='yellow'))
     chain = prompt.rag_query_generator | chat_model
     message: BaseMessage = await chain.ainvoke({'data': '\n\n'.join([
             f"Question: {sample.question}\nQuery: {sample.query}" for sample in samples
@@ -197,13 +197,14 @@ async def fetch_output(output: SearchOutput, question: str, driver: neo4j.AsyncD
     elif visualization == model.VisualizationType.TABLE:
         result['data'] = data
         result['fields'] = list(data[0].keys())
-    elif visualization == model.VisualizationType.BAR_CHART:
+    elif visualization in [model.VisualizationType.BAR_CHART, model.VisualizationType.PIE_CHART, model.VisualizationType.LINE_CHART]:
         cols = list(data[0].keys())
         if len(cols) < 2:
             return None
         result['data'] = data
         result['fields'] = cols
         result['axes'] = {'x': cols[0], 'y': cols[1]}
+    result['data'] = result['data'] or []
     return model.SearchResultItem(**result)
    
 async def answer_question(question: str, 
@@ -227,6 +228,8 @@ async def answer_question(question: str,
     else:
         result: list[model.SearchResultItem] = await asyncio.gather(*result_promises)
 
+    if not result:
+        print(format_text("> No results found", bold=True, color="red"))
     return sorted([r for r in result if r], key=lambda r: r.order)
 
 async def default_search(question: str, driver: neo4j.AsyncDriver, result_limit:int = 20) -> list[model.SearchResultItem]:
@@ -240,10 +243,12 @@ async def default_search(question: str, driver: neo4j.AsyncDriver, result_limit:
         query = await query_corrector(query)
     print(format_text(f"> Generated query:", bold=True))
     print(format_text(query, color='yellow'))
+    if not query:
+        return []
     async with driver.session() as session:
         data = await (await session.run(query)).data()
     if not data:
-        return None 
+        return []
     answer_chain = CYPHER_QA_PROMPT | chat_model
     answer: BaseMessage = await answer_chain.ainvoke({'question': question, 'context': jsonify_result(data)})
     snippet = answer.content

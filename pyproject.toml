@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "ragnroll-web"
+name = "ragnroll"
 version = "0.1.0"
 description = ""
 authors = ["Izhar Firdaus <kagesenshi.87@gmail.com>"]
@@ -9,6 +9,14 @@ packages = [{include = "ragnroll"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 reflex = "0.4.8.post1"
+neo4j = "^5.23.1"
+langchain = "^0.2.14"
+poetry-dotenv-plugin = "^0.2.0"
+langchain-openai = "^0.1.22"
+python-magic = "^0.4.27"
+python-multipart = "^0.0.9"
+langchain-community = "^0.2.12"
+pydantic-settings = "^2.4.0"
 
 [build-system]
 requires = ["poetry-core"]

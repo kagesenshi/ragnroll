@@ -1,20 +1,12 @@
 {
   "folders": [
     {
-      "name": "ROOT",
+      "name": "Rag'n'Roll",
       "path": ".",
       "settings": {
         "python.defaultInterpreterPath": "/var/lib/user/poetry/bin/python"
       }
-    },
-    {
-      "name": "Web",
-      "path": "./web"
-    },
-    {
-      "name": "Backend",
-      "path": "./backend"
-    },
+    }
   ],
   "settings": {
       "files.exclude": {
@@ -36,15 +28,11 @@
   },
   "launch": {
       "compounds": [{
-          "name": "Launch Web & Backend",
+          "name": "Launch App",
           "configurations": [
             {
-               "folder": "Backend",
+               "folder": "Rag'n'Roll",
                "name": "Run"
-            },
-            {
-              "folder": "Web",
-              "name": "Run"
             }
          ],
          "stopAll": true,

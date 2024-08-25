@@ -15,8 +15,10 @@ import yaml
 import yaml.parser
 import pydantic
 from .rag import answer_question, default_search
+from ..ragnroll import app as reflex_app
 
-app = fastapi.FastAPI(title="RAG'n'Roll")
+app = reflex_app.api
+#app = fastapi.FastAPI(title="RAG'n'Roll")
 
 async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
     print(format_text(f"> Searching: '{question}'", bold=True))

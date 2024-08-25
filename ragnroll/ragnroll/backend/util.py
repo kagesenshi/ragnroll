@@ -16,9 +16,11 @@ S = typing.TypeVar('S', bound=pydantic.BaseModel)
 
 async def extract_model(schema: type[S], request: fastapi.Request) -> S:
     content_type = request.headers.get('Content-Type')
-    if content_type.lower() in ['application/yaml', 'text/x-yaml', 'application/x-yaml']:
+    if content_type.lower() in ['application/yaml', 'text/yaml', 'text/x-yaml', 'application/x-yaml']:
         config_yaml = (await request.body()).decode('utf-8')
         config_json = json.dumps(yaml.safe_load(config_yaml))
     elif content_type.lower() in ['application/json', 'text/json']:
+        config_json = await request.body()
+    else:
         config_json = await request.body()
     return schema.model_validate_json(config_json)

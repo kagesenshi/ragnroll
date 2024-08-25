@@ -12,3 +12,10 @@ lib/
 .devcontainer/neo4j-logs/
 .devcontainer/neo4j-import/
 **/.venv
+
+*.db
+*.py[cod]
+**/.web/
+**/__pycache__/
+
+.env

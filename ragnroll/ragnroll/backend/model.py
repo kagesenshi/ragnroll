@@ -29,6 +29,7 @@ class VisualizationType(enum.StrEnum):
     BAR_CHART = 'bar-chart'
     LINE_CHART = 'line-chart'
     TABLE = 'table'
+    PIE_CHART = 'pie-chart'
 
 
 class Language(enum.StrEnum):
