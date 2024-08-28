@@ -4,7 +4,7 @@
       "name": "Rag'n'Roll",
       "path": ".",
       "settings": {
-        "python.defaultInterpreterPath": "/var/lib/user/poetry/bin/python"
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
       }
     }
   ],
