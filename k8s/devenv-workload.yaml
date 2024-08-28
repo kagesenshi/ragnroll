@@ -1,0 +1,104 @@
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ragnroll-devenv
+spec:
+  serviceName: ragnroll-devenv
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ragnroll-devenv
+  template:
+      metadata:
+        labels:
+          app: ragnroll-devenv
+      spec:
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+          - name: main
+            image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9-0.1.0
+            imagePullPolicy: Always
+            volumeMounts:
+            - mountPath: /home
+              name: data
+            - mountPath: /var/log/neo4j
+              name: n4j-logs
+            - mountPath: /var/lib/neo4j/import
+              name: n4j-import
+            envFrom:
+            - configMapRef:
+                name: ragnroll-devenv
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: ragnroll-data
+          - name: n4j-import
+            persistentVolumeClaim:
+              claimName: ragnroll-neo4j-import
+          - name: n4j-logs
+            persistentVolumeClaim:
+              claimName: ragnroll-neo4j-logs
+          restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ragnroll-neo4j
+spec:
+  serviceName: ragnroll-neo4j
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ragnroll-neo4j
+  template:
+      metadata:
+        labels:
+          app: ragnroll-neo4j
+      spec:
+          containers:
+          - name: main
+            image: docker.io/neo4j:5.18.0-community-ubi9
+            imagePullPolicy: Always
+            volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /logs
+              name: n4j-logs
+            - mountPath: /var/lib/neo4j/import
+              name: n4j-import
+            envFrom:
+            - configMapRef:
+                name: ragnroll-neo4j-config
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: ragnroll-neo4j-data
+          - name: n4j-import
+            persistentVolumeClaim:
+              claimName: ragnroll-neo4j-import
+          - name: n4j-logs
+            persistentVolumeClaim:
+              claimName: ragnroll-neo4j-logs
+          restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ragnroll-neo4j
+spec:
+  selector:
+    app: ragnroll-neo4j
+  ports:
+  - name: http
+    protocol: TCP
+    port: 7474
+    targetPort: 7474
+  - protocol: TCP
+    port: 7687
+    targetPort: 7687
+    name: bolt
+  type: ClusterIP
