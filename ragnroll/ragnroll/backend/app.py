@@ -46,8 +46,21 @@ async def post_search(request: fastapi.Request, payload: model.SearchParam) -> m
 async def chat():
     pass
 
+@app.get('/resource/expertise/v1', response_model_exclude_none=True, response_model_exclude_unset=True)
+async def list_expertise(request: fastapi.Request) -> model.Result[list[model.ConfigMetadata]]:
+    async def _job(txn: neo4j.AsyncTransaction):
+        query = '''
+        MATCH (n:_RAGExpertise)
+        RETURN n.name as name
+        '''
+        result = await txn.run(query)
+        return await result.data()
+    session: neo4j.AsyncSession = await db.session(request)
+    results = await session.execute_read(_job)
+    return model.Result[list[model.ConfigMetadata]](data=results)
+
 @app.get('/resource/expertise/v1/{identifier}')
-async def get_expertise(request: fastapi.Request, identifier: str):
+async def get_expertise(request: fastapi.Request, identifier: str) -> model.RAGExpertise:
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
         MATCH (n:_RAGExpertise {name: $name})
@@ -57,15 +70,9 @@ async def get_expertise(request: fastapi.Request, identifier: str):
         return await result.single()
     session: neo4j.AsyncSession = await db.session(request)
     result: neo4j.Record = await session.execute_read(_job)
-    return fastapi.responses.Response(
-        content=result['n']['body'],
-        media_type=result['n']['filetype'],
-        headers={
-            'Content-Length': str(result['n']['filesize'])
-        }
-    )
+    return model.RAGExpertise.model_validate_json(result['n']['body'])
 
-@app.post('/resource/expertise/v1')
+@app.post('/resource/expertise/v1', response_class=fastapi.responses.RedirectResponse, status_code=303)
 async def upload_expertise(request: fastapi.Request, config: model.RAGExpertise):
     session: neo4j.AsyncSession = await db.session(request)
     async def _job(txn: neo4j.AsyncTransaction):
@@ -89,10 +96,11 @@ async def upload_expertise(request: fastapi.Request, config: model.RAGExpertise)
         SET n.filesize = $filesize,
             n.body = $body
         '''
+        jsondata = config.model_dump_json(indent=4)
         result = await txn.run(query=query, parameters={
             'name': config.metadata.name,
-            'body': config.model_dump_json(),
-            'filesize': len(config.model_dump_json()),
+            'body': jsondata,
+            'filesize': len(jsondata),
             'filetype': 'application/json'
         })
 
@@ -153,10 +161,10 @@ async def upload_expertise(request: fastapi.Request, config: model.RAGExpertise)
                             'query': sample.query
                         })
     result = await session.execute_write(_job)
-    return fastapi.responses.RedirectResponse(url=f'/expertise/{config.metadata.name}')
+    return fastapi.responses.RedirectResponse(url=f'/expertise/{config.metadata.name}', status_code=303)
 
-@app.delete('/resource/expertise/v1/{identifier}')
-async def delete_expertise(request: fastapi.Request, identifier: str) -> model.Message:
+@app.delete('/resource/expertise/v1/{identifier}', response_model_exclude_unset=True)
+async def delete_expertise(request: fastapi.Request, identifier: str) -> model.Result[model.Message]:
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
         MATCH (n:_RAGExpertise {name: $name})
@@ -170,32 +178,27 @@ async def delete_expertise(request: fastapi.Request, identifier: str) -> model.M
         await txn.run(query=query, parameters={'name': identifier})
     session: neo4j.AsyncSession = await db.session(request)
     await session.execute_write(_job)
-    return {
-        'msg': f'Deleted {identifier}'
-    }
+    return model.Result[model.Message](
+        data=model.Message(message=f'Deleted {identifier}')
+    )
 
 @app.exception_handler(yaml.parser.ParserError)
-async def parser_error(exc: yaml.parser.ParserError, request: fastapi.Request) -> model.Message:
-    return fastapi.responses.JSONResponse(
-        status_code=422,
-        content={
-            'msg': 'Invalid data type'
-        })
+async def parser_error(exc: yaml.parser.ParserError, request: fastapi.Request, response: fastapi.Response) -> model.ErrorResult:
+    response.status_code = 422
+    return model.ErrorResult(
+        errors=[model.Error(default='Invalid data type')]
+    )
 
 @app.exception_handler(fastapi.HTTPException)
-async def http_exc(exc: fastapi.HTTPException):
-    return fastapi.responses.JSONResponse(
-        status_code=exc.status_code,
-        content={
-            'msg': exc.detail
-        }
+async def http_exc(exc: fastapi.HTTPException, response: fastapi.Response) -> model.ErrorResult:
+    response.status_code = exc.status_code
+    return model.ErrorResult(
+        errors=[model.Error(detail=exc.detail)]
     )
 
 @app.exception_handler(pydantic.ValidationError)
-async def pydantic_validation_exc(conn, exc: pydantic.ValidationError):
-    return fastapi.responses.JSONResponse(
-        status_code=422,
-        content={
-            'detail': exc.errors()
-        }
+async def pydantic_validation_exc(conn, exc: pydantic.ValidationError, response: fastapi.Response) -> model.ErrorResult:
+    response.status_code = 422
+    return model.ErrorResult(
+        errors=[model.Error(detail=e.msg, meta={'raw': e}) for e in exc.errors()]
     )

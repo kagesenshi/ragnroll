@@ -6,6 +6,8 @@ import neo4j
 NAME_PATTERN=r'^[a-z0-9\-]*$'
 
 T = typing.TypeVar('T', bound=pydantic.BaseModel)
+M = typing.TypeVar('M', bound=pydantic.BaseModel)
+
 
 class SearchParam(pydantic.BaseModel):
     question: str
@@ -19,7 +21,7 @@ class SearchMeta(pydantic.BaseModel):
     pass 
 
 class Message(pydantic.BaseModel):
-    msg: str
+    message: str
 
 class QueryType(enum.StrEnum):
    CYPHER = 'cypher'
@@ -89,7 +91,21 @@ class SearchResultItem(pydantic.BaseModel):
     fields: list[str]
     axes: Axes = pydantic.Field(default_factory=Axes)
     order: int = 0
- 
-class SearchResult(pydantic.BaseModel):
-    data: list[SearchResultItem]
-#    meta: SearchMeta
+
+class Error(pydantic.BaseModel):
+    detail: str 
+    status: typing.Optional[int] = pydantic.Field(default=None)
+    code: typing.Optional[str] = pydantic.Field(default=None)
+    meta: typing.Optional[dict] = pydantic.Field(default=None)
+
+class ErrorResult(pydantic.BaseModel):
+    errors: typing.Optional[list[Error]] = pydantic.Field(default_factory=list)
+
+class Result(ErrorResult, typing.Generic[T]):
+    data: typing.Union[list[T], T]
+
+class ExtendedResult(Result, typing.Generic[T, M]):
+    meta: M
+
+class SearchResult(Result[list[SearchResultItem]]):
+    pass
