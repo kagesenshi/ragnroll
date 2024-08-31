@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Izhar Firdaus <kagesenshi.87@gmail.com>"]
 readme = "README.md"
-packages = [{include = "ragnroll"}]
+packages = [{include = "ragnroll/ragnroll"}, {include = "ragnroll/rxconfig.py"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -17,6 +17,7 @@ python-magic = "^0.4.27"
 python-multipart = "^0.0.9"
 langchain-community = "^0.2.12"
 pydantic-settings = "^2.4.0"
+fastapi-yaml = "^0.2.0"
 
 [build-system]
 requires = ["poetry-core"]

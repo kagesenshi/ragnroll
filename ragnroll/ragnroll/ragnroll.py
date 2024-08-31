@@ -1,5 +1,7 @@
 """Welcome to Reflex! This file outlines the steps to create a basic app."""
 
+from .components.snippet.barchart import barchart_snippet
+from .components.snippet.table import table_snippet
 from rxconfig import config # type: ignore
 import reflex 
 
@@ -7,9 +9,7 @@ config : reflex.Config = config
 
 from .components import (
     navbar,
-    text_snippet,
-    table_snippet,
-    barchart_snippet
+    text_snippet
 )
 from .components.util import wrap_search
 import reflex as rx

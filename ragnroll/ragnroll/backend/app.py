@@ -14,12 +14,13 @@ import neo4j.graph
 import yaml
 import yaml.parser
 import pydantic
+from fastapi_yaml import YamlRoute
 from .rag import answer_question, default_search
 from ..ragnroll import app as reflex_app
 
 app = reflex_app.api
 app.title = "RAG'n'Roll"
-#app = fastapi.FastAPI(title="RAG'n'Roll")
+app.router.route_class = YamlRoute
 
 async def _search(request: fastapi.Request, question: str) -> model.SearchResult:
     print(format_text(f"> Searching: '{question}'", bold=True))
@@ -41,7 +42,11 @@ async def search(request: fastapi.Request, question: str) -> model.SearchResult:
 async def post_search(request: fastapi.Request, payload: model.SearchParam) -> model.SearchResult:
     return await _search(request, payload.question)
 
-@app.get('/expertise/{identifier}')
+@app.post("/chat/completions", response_model_exclude_none=True, response_model_exclude_unset=True)
+async def chat():
+    pass
+
+@app.get('/resource/expertise/v1/{identifier}')
 async def get_expertise(request: fastapi.Request, identifier: str):
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
@@ -60,9 +65,8 @@ async def get_expertise(request: fastapi.Request, identifier: str):
         }
     )
 
-@app.post('/expertise/')
-async def upload_expertise(request: fastapi.Request):
-    config = await extract_model(model.RAGExpertise, request)
+@app.post('/resource/expertise/v1')
+async def upload_expertise(request: fastapi.Request, config: model.RAGExpertise):
     session: neo4j.AsyncSession = await db.session(request)
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
@@ -151,7 +155,7 @@ async def upload_expertise(request: fastapi.Request):
     result = await session.execute_write(_job)
     return fastapi.responses.RedirectResponse(url=f'/expertise/{config.metadata.name}')
 
-@app.delete('/expertise/{identifier}')
+@app.delete('/resource/expertise/v1/{identifier}')
 async def delete_expertise(request: fastapi.Request, identifier: str) -> model.Message:
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
