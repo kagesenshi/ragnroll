@@ -24,7 +24,9 @@
         "editor.formatOnType": true,
         "editor.wordBasedSuggestions": "off",
         "editor.defaultFormatter": "ms-python.black-formatter"
-      }
+      },
+      "python.analysis.include": ["ragnroll"],
+      "python.analysis.extraPaths": ["ragnroll"]
   },
   "launch": {
       "compounds": [{

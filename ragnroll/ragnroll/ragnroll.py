@@ -80,9 +80,6 @@ def index() -> rx.Component:
     )
 
 
-
-
 # Add state and page to the app.
 app = rx.App()
-from .backend.app import app as api_app
 # app.compile()
