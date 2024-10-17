@@ -64,6 +64,7 @@ class RAGPattern(pydantic.BaseModel):
 
 class ConfigMetadata(pydantic.BaseModel):
     name: str = pydantic.Field(strict=True, pattern=NAME_PATTERN)
+    title: typing.Optional[str] = None
 
 class RAGExpertiseSpec(pydantic.BaseModel):
     patterns: list[RAGPattern]    
@@ -93,16 +94,30 @@ class SearchResultItem(pydantic.BaseModel):
     order: int = 0
 
 class Error(pydantic.BaseModel):
-    detail: str 
+    detail: typing.Optional[str] = None
     status: typing.Optional[int] = pydantic.Field(default=None)
     code: typing.Optional[str] = pydantic.Field(default=None)
     meta: typing.Optional[dict] = pydantic.Field(default=None)
 
 class ErrorResult(pydantic.BaseModel):
+    detail: typing.Optional[str] = None
     errors: typing.Optional[list[Error]] = pydantic.Field(default_factory=list)
+
+class Links(pydantic.BaseModel):
+    self: str 
+    next: typing.Optional[str] = None
+    prev: typing.Optional[str] = None
+    
+class ResultModel(ErrorResult, typing.Generic[T]):
+    data: T
+    links: typing.Optional[Links] = None
+
+class ExtendedResultModel(ResultModel, typing.Generic[T, M]):
+    meta: M
 
 class Result(ErrorResult, typing.Generic[T]):
     data: typing.Union[list[T], T]
+    links: typing.Optional[Links] = None
 
 class ExtendedResult(Result, typing.Generic[T, M]):
     meta: M

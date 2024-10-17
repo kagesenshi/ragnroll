@@ -1,16 +1,22 @@
 import reflex as rx
-from ..state import State
 
-def wrap_search(component: rx.Component) -> rx.Component:
-    return rx.cond(
-        State.searching,
-        rx.flex(
-            rx.center(
-                rx.chakra.spinner(size='xl'),
-                width='100%'
+from ragnroll import state
+from ragnroll.components import navbar
+import reflex_chakra as rxchakra
+
+def main_template(component: rx.Component, **kwargs):
+    return rx.vstack(
+        navbar(),
+        # alert box
+        rx.cond(
+            state.Session.alert_message,
+            rxchakra.alert(
+                rxchakra.alert_icon(),
+                rxchakra.alert_title(state.Session.alert_message),
+                status="error",
             ),
-            width="100%",
-            height="200px"
         ),
-        component,
+        rx.vstack(component, width="100%", padding_left="20px", padding_right="20px"),
+        width="100%",
+        **kwargs
     )

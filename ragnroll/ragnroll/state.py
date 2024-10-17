@@ -19,7 +19,9 @@ class State(rx.State):
     search_results: list[SearchResultItem] = [] 
     query: str = ''
     alert_message: str = ""
-    
+
+    code: str = ''
+
     async def handle_submit(self, form_data: dict):
         if self.searching:
             return 
@@ -30,7 +32,7 @@ class State(rx.State):
         yield
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(f'{rxconfig.api_url}/search', params={'question': form_data['question']})
+                response = await client.get(f'{config.api_url}/search', params={'question': form_data['question']})
                 data = response.json()
             self.search_results = [SearchResultItem(**d) for d in data['data']]
         except httpx.ReadTimeout:

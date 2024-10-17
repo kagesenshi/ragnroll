@@ -14,6 +14,8 @@ import yaml.parser
 import pydantic
 from fastapi_yaml import YamlRoute
 import fastapi.exceptions
+from fastapi.responses import JSONResponse
+
 
 from ..ragnroll import app as reflex_app
 
@@ -29,29 +31,31 @@ async def chat():
     pass
 
 @reflex_app.api.exception_handler(yaml.parser.ParserError)
-async def parser_error(exc: yaml.parser.ParserError, request: fastapi.Request, response: fastapi.Response) -> model.ErrorResult:
+async def parser_error(request: fastapi.Request, exc: yaml.parser.ParserError, response: fastapi.Response) -> model.ErrorResult:
     response.status_code = 422
     return model.ErrorResult(
-        errors=[model.Error(default='Invalid data type')]
+        detail='Unable to parse YAML',
+        errors=[model.Error(detail='Invalid data type')]
     )
 
 @reflex_app.api.exception_handler(fastapi.HTTPException)
-async def http_exc(exc: fastapi.HTTPException, response: fastapi.Response) -> model.ErrorResult:
+async def http_exc(request: fastapi.Request, exc: fastapi.HTTPException, response: fastapi.Response) -> model.ErrorResult:
     response.status_code = exc.status_code
     return model.ErrorResult(
+        detail=exc.detail,
         errors=[model.Error(detail=exc.detail)]
     )
 
-@reflex_app.api.exception_handler(pydantic.ValidationError)
-async def pydantic_validation_exc(exc: pydantic.ValidationError, response: fastapi.Response) -> model.ErrorResult:
-    response.status_code = 422
-    return model.ErrorResult(
-        errors=[model.Error(detail=e.msg, meta={'raw': e}) for e in exc.errors()]
-    )
+#@reflex_app.api.exception_handler(pydantic.ValidationError)
+#async def pydantic_validation_exc(request: fastapi.Request, exc: pydantic.ValidationError):
+#    return JSONResponse(content=model.ErrorResult(
+#        detail='Data validation error',
+#        errors=[model.Error(detail=e['msg'], meta={'raw': e}) for e in exc.errors()]
+#    ).model_dump(), status_code=422)
 
 @reflex_app.api.exception_handler(fastapi.exceptions.RequestValidationError)
-async def fastapi_validation_exc(exc: fastapi.exceptions.RequestValidationError,  response: fastapi.Response) -> model.ErrorResult:
-    response.status_code = 422
-    return model.ErrorResult(
-        errors=[model.Error(detail=e.msg, meta={'raw': e}) for e in exc.errors()]
-    )
+async def fastapi_validation_exc(request: fastapi.Request, exc: fastapi.exceptions.RequestValidationError) -> model.ErrorResult:
+    return JSONResponse(content=model.ErrorResult(
+        detail='Data validation error',
+        errors=[model.Error(detail=e['msg'], meta={'raw': e}) for e in exc.errors()]
+    ).model_dump(), status_code=422)

@@ -1,3 +1,6 @@
+[project]
+name = "ragnroll"
+
 [tool.poetry]
 name = "ragnroll"
 version = "0.1.0"
@@ -8,8 +11,7 @@ packages = [{include = "ragnroll/ragnroll"}, {include = "ragnroll/rxconfig.py"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-reflex = "0.5.10"
-reflex-chakra = "0.5.10"
+reflex = "0.6.2.post1"
 neo4j = "^5.23.1"
 langchain = "^0.2.14"
 poetry-dotenv-plugin = "^0.2.0"
@@ -19,6 +21,9 @@ python-multipart = "^0.0.9"
 langchain-community = "^0.2.12"
 pydantic-settings = "^2.4.0"
 fastapi-yaml = "^0.2.0"
+reflex-monaco = "^0.0.1"
+reflex-clerk = "^1.0.3"
+reflex-chat = "^0.0.1"
 
 [build-system]
 requires = ["poetry-core"]

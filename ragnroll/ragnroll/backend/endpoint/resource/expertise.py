@@ -6,9 +6,13 @@ import neo4j
 
 from ...langchain import embeddings_model
 
+ConfigModel = model.ResultModel[model.ConfigMetadata]
+ConfigModelList = model.Result[list[ConfigModel]]
+ExpertiseModel = model.ResultModel[model.RAGExpertise]
+ExpertiseModelList = model.Result[list[ExpertiseModel]]
 
 @app.get('/resource/expertise/v1', response_model_exclude_none=True, response_model_exclude_unset=True)
-async def list_expertise(request: fastapi.Request) -> model.Result[list[model.ConfigMetadata]]:
+async def list_expertise(request: fastapi.Request) -> ConfigModelList:
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
         MATCH (n:_RAGExpertise)
@@ -18,11 +22,17 @@ async def list_expertise(request: fastapi.Request) -> model.Result[list[model.Co
         return await result.data()
     session: neo4j.AsyncSession = await db.session(request)
     results = await session.execute_read(_job)
-    return model.Result[list[model.ConfigMetadata]](data=results)
+    objs = []
+    for r in results:
+        if not r.get('title', None):
+            r['title'] = r['name']
+        obj = {'data': r, 'links': {'self': f'/resource/expertise/v1/{r["name"]}'}}
+        objs.append(obj)
+    return ConfigModelList(data=objs)
 
 
 @app.get('/resource/expertise/v1/{identifier}')
-async def get_expertise(request: fastapi.Request, identifier: str) -> model.RAGExpertise:
+async def get_expertise(request: fastapi.Request, identifier: str) -> ExpertiseModel:
     async def _job(txn: neo4j.AsyncTransaction):
         query = '''
         MATCH (n:_RAGExpertise {name: $name})
@@ -32,7 +42,12 @@ async def get_expertise(request: fastapi.Request, identifier: str) -> model.RAGE
         return await result.single()
     session: neo4j.AsyncSession = await db.session(request)
     result: neo4j.Record = await session.execute_read(_job)
-    return model.RAGExpertise.model_validate_json(result['n']['body'])
+    return ExpertiseModel(
+        data=model.RAGExpertise.model_validate_json(result['n']['body']), 
+        links={
+            'self': f"/resource/expertise/v1/{result['n']['name']}"
+        }
+    )
 
 
 @app.post('/resource/expertise/v1', response_class=fastapi.responses.RedirectResponse, status_code=303)
@@ -124,7 +139,7 @@ async def upload_expertise(request: fastapi.Request, config: model.RAGExpertise)
                             'query': sample.query
                         })
     result = await session.execute_write(_job)
-    return fastapi.responses.RedirectResponse(url=f'/expertise/{config.metadata.name}', status_code=303)
+    return fastapi.responses.RedirectResponse(url=f'/resource/expertise/v1/{config.metadata.name}', status_code=303)
 
 
 @app.delete('/resource/expertise/v1/{identifier}', response_model_exclude_unset=True)
