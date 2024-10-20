@@ -1,14 +1,4 @@
 {
-  "folders": [
-    {
-      "name": "Rag'n'Roll",
-      "path": ".",
-      "settings": {
-        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
-      }
-    }
-  ],
-  "settings": {
       "files.exclude": {
          "**/__pycache__": true,
          "**/.web": true,
@@ -27,22 +17,4 @@
       },
       "python.analysis.include": ["ragnroll"],
       "python.analysis.extraPaths": ["ragnroll"]
-  },
-  "launch": {
-      "compounds": [{
-          "name": "Launch App",
-          "configurations": [
-            {
-               "folder": "Rag'n'Roll",
-               "name": "Run"
-            }
-         ],
-         "stopAll": true,
-         "presentation": {
-          "hidden": false,
-          "group": "",
-          "order": 0
-         }
-      }]
-  }
 }

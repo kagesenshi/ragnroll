@@ -13,6 +13,7 @@ def load():
     from .backend.endpoint.resource import expertise 
     from .page import search
     from .page import expertise
+    from .page import graph
     router.reflex_app.api.include_router(router.router)
 
 load()

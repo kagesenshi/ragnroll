@@ -2,8 +2,8 @@ version: '3.7'
 services:
   devcontainer:
     #userns_mode: keep-id:uid=1000,gid=1000
-    image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9-0.1.0-5
-    command: tail -f /dev/null
+    image: registry.gitlab.com/abyres/releases/python-flutter-devcontainer:py3.11-flutter3.16.9-0.1.0-10
+    command: /bin/tini -- /usr/bin/tail -f /dev/null
     environment:
       - NEO4J_DATABASE=neo4j
       - NEO4J_USERNAME=neo4j
