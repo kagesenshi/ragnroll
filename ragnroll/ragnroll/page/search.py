@@ -4,7 +4,6 @@ from .. import state
 from ..components import text_snippet
 from ..components.snippet.barchart import barchart_snippet
 from ..components.snippet.table import table_snippet
-from ..components.thirdparty.code_editor import code_editor, disable_intellisense
 from ..components.util import main_template
 
 import reflex as rx

@@ -24,7 +24,9 @@ fastapi-yaml = "^0.2.0"
 reflex-monaco = "^0.0.1"
 reflex-clerk = "^1.0.3"
 reflex-chat = "^0.0.1"
+reflex-neo4j-nvl = {path = "components/neo4j_nvl"}
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+

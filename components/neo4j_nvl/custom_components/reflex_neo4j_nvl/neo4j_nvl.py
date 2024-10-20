@@ -84,7 +84,7 @@ class HitTargets(TypedDict):
     relationships: list[HitTargetRelationship]
 
 class Neo4jNVL(NoSSRComponent):
-    library = '/public/nvl'
+    library = f'/public/{rx._x.asset('asset')}'
     tag = 'InteractiveNvlWrapper'
 
     lib_dependencies: list[str] = [

@@ -1,7 +1,5 @@
 *.db
-*.egg-info/
 *.py[cod]
 .web
 __pycache__/
 assets/external/
-dist/
