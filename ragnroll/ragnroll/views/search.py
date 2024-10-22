@@ -1,4 +1,5 @@
 import reflex as rx
+import reflex_chakra as rxchakra
 import httpx
 from rxconfig import config
 import typing
@@ -12,7 +13,7 @@ class SearchResultItem(rx.Base):
     axes: dict[str, str] = {}
  
 
-class State(rx.State):
+class SearchState(rx.State):
     """The app state."""
     
     searching: bool = False 
@@ -43,4 +44,3 @@ class State(rx.State):
             self.searching=False
             yield
 
-Session = State

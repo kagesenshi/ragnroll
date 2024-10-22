@@ -1,6 +1,5 @@
-from ...state import SearchResultItem
+from ...views.search import SearchResultItem
 import reflex as rx
-
 
 def barchart_snippet(result: SearchResultItem) -> rx.Component:
     queries = rx.foreach(

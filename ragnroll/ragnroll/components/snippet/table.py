@@ -1,4 +1,4 @@
-from ...state import SearchResultItem
+from ...views.search import SearchResultItem
 import reflex as rx
 
 def table_snippet(result: SearchResultItem) -> rx.Component:

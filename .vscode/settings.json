@@ -15,6 +15,6 @@
         "editor.wordBasedSuggestions": "off",
         "editor.defaultFormatter": "ms-python.black-formatter"
       },
-      "python.analysis.include": ["ragnroll"],
-      "python.analysis.extraPaths": ["ragnroll"]
+      "python.analysis.include": ["ragnroll", "components/babble/custom_components", "components/neo4j_nvl/custom_components"],
+      "python.analysis.extraPaths": ["ragnroll", "components/babble/custom_components", "components/neo4j_nvl/custom_components"]
 }

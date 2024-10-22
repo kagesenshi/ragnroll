@@ -1,5 +1,5 @@
 import reflex as rx
 
 config = rx.Config(
-    app_name="ragnroll",
+    app_name="babble_demo",
 )

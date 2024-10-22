@@ -1,6 +1,6 @@
 import reflex as rx
 
-from ...state import SearchResultItem
+from ...views.search import SearchResultItem
 
 def text_snippet(result: SearchResultItem) -> rx.Component:
     queries = rx.foreach(

@@ -23,8 +23,12 @@ pydantic-settings = "^2.4.0"
 fastapi-yaml = "^0.2.0"
 reflex-monaco = "^0.0.1"
 reflex-clerk = "^1.0.3"
-reflex-chat = "^0.0.1"
-reflex-neo4j-nvl = {path = "components/neo4j_nvl"}
+markdown = "^3.7"
+ollama = "^0.3.3"
+
+[tool.poetry.group.dev.dependencies]
+reflex-babble = {path = "components/babble", develop = true}
+reflex-neo4j-nvl = {path = "components/neo4j_nvl", develop = true}
 
 [build-system]
 requires = ["poetry-core"]
