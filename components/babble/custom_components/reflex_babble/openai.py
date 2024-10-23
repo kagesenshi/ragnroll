@@ -1,6 +1,7 @@
 from .state import State, QA
 import os
 from openai import OpenAI
+from .settings import settings
 
 async def openai_process_question(state: type[State], question: str):
     """Get the response from the API.
@@ -8,10 +9,6 @@ async def openai_process_question(state: type[State], question: str):
     Args:
         form_data: A dict with the current question.
     """
-
-    # Checking if the API key is set properly
-    if not os.getenv("OPENAI_API_KEY"):
-        raise Exception("Please set OPENAI_API_KEY environment variable.")
 
     # Add the question to the list of questions.
     qa = QA(question=question, answer="")
@@ -37,7 +34,7 @@ async def openai_process_question(state: type[State], question: str):
 
     # Start a new session to answer the question.
     session = OpenAI().chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
+        model=settings.OPENAI_MODEL,
         messages=messages,
         stream=True,
     )

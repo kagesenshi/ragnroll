@@ -2,9 +2,61 @@ import reflex as rx
 import reflex_chakra as rxchakra
 from .components import loading_icon
 from .state import QA, State
-
+from . import styles
+from .api import API, API_INSTANCES
+import hashlib
 
 message_style = dict(display="inline-block", padding="1em", border_radius="8px", max_width=["30em", "30em", "50em", "50em", "50em", "50em"])
+
+def menu_item(text: str, url: str) -> rx.Component:
+    """Menu item.
+
+    Args:
+        text: The text of the item.
+        url: The URL of the item.
+
+    Returns:
+        rx.Component: The menu item component.
+    """
+    # Whether the item is active.
+    active = (rx.State.router.page.path == url.lower()) 
+    return rx.link(
+        rx.hstack(
+            rx.text(text, weight="regular"),
+            style={
+                "_hover": {
+                    "background_color": rx.cond(
+                        active,
+                        styles.accent_bg_color,
+                        styles.gray_bg_color,
+                    ),
+                    "color": rx.cond(
+                        active,
+                        styles.accent_text_color,
+                        styles.text_color,
+                    ),
+                },
+                "opacity": rx.cond(
+                    active,
+                    "1",
+                    "0.95",
+                ),
+            },
+            align="center",
+            width="100%",
+            border_radius=styles.border_radius,
+            padding="0.35em",
+            opacity=rx.cond(
+                active,
+                "1",
+                "0.8",
+            )
+        ),
+        underline="none",
+        href=url,
+        width="100%",
+    )
+
 
 def message(qa: QA) -> rx.Component:
     """A single question/answer message.
@@ -55,8 +107,7 @@ def chat() -> rx.Component:
     )
 
 
-def action_bar() -> rx.Component:
-    """The action bar to send a new message."""
+def action_bar(api_id: str) -> rx.Component:
     return rx.center(
         rx.vstack(
             rxchakra.form(
@@ -85,7 +136,7 @@ def action_bar() -> rx.Component:
                     ),
                     is_disabled=State.processing,
                 ),
-                on_submit=State.process_question,
+                on_submit=lambda form_data: State.process_question(api_id, form_data),
                 reset_on_submit=True,
             ),
             rx.text(
@@ -106,4 +157,13 @@ def action_bar() -> rx.Component:
         background_color=rx.color("mauve", 2),
         align_items="stretch",
         width="100%",
+    )
+
+def history(**props) -> rx.Component:
+    return rx.vstack(
+        rx.foreach(
+            State.chats, lambda entry: menu_item(entry[0], '/chat')
+        ),
+        spacing="0",
+        **props
     )

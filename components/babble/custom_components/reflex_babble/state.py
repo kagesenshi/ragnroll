@@ -5,11 +5,8 @@ import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from typing import Callable, AsyncGenerator, Any, TypedDict
-
-# Checking if the API key is set properly
-if not os.getenv("OPENAI_API_KEY"):
-    raise Exception("Please set OPENAI_API_KEY environment variable.")
-
+from .settings import settings 
+from .api import API, API_INSTANCES
 
 class QA(rx.Base):
     """A question and answer pair."""
@@ -21,8 +18,6 @@ class QA(rx.Base):
 DEFAULT_CHATS = {
     "Intros": [],
 }
-
-MODEL_REGISTRY: dict[str, AsyncGenerator[None, None]] = {}
 
 def render_markdown(text: str) -> str:
     return markdown.markdown(text, extensions=[CodeHiliteExtension(linenums=False), FencedCodeExtension()])
@@ -44,8 +39,6 @@ class State(rx.State):
 
     # The name of the new chat.
     new_chat_name: str = ""
-
-    model: str = "ollama"
 
     def create_chat(self):
         """Create a new chat."""
@@ -85,7 +78,7 @@ class State(rx.State):
         """
         return list(self.chats.keys())
 
-    async def process_question(self, form_data: dict[str, str]):
+    async def process_question(self, api_id: str, form_data: dict[str, str]):
         # Get the question from the form
         question = form_data["question"]
 
@@ -93,7 +86,35 @@ class State(rx.State):
         if question == "":
             return
 
-        model = MODEL_REGISTRY[self.model]
-        async for value in model(self, question):
+        async for value in self._process_question(api_id, question):
             yield value
 
+
+    async def _process_question(self, api_id: str, question: str):
+        """Get the response from the API.
+    
+        Args:
+            form_data: A dict with the current question.
+        """
+    
+        # Add the question to the list of questions.
+        qa = QA(question=question, answer="")
+        self.chats[self.current_chat].append(qa)
+    
+        # Clear the input and start the processing.
+        self.processing = True
+        yield
+    
+        # Stream the results, yielding after every word.
+        async for answer_text in API_INSTANCES[api_id].answer_question(question, self.chats[self.current_chat]):
+            # Ensure answer_text is not None before concatenation
+            if answer_text is not None:
+                self.chats[self.current_chat][-1].answer += answer_text
+            else:
+                # Handle the case where answer_text is None, perhaps log it or assign a default value
+                # For example, assigning an empty string if answer_text is None
+                answer_text = ""
+                self.chats[self.current_chat][-1].answer += answer_text
+            self.chats = self.chats
+            yield
+    
