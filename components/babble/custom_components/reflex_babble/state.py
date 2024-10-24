@@ -85,6 +85,9 @@ class State(rx.State):
         # Check if the question is empty
         if question == "":
             return
+        
+        if not question:
+            return
 
         async for value in self._process_question(api_id, question):
             yield value
@@ -117,4 +120,7 @@ class State(rx.State):
                 self.chats[self.current_chat][-1].answer += answer_text
             self.chats = self.chats
             yield
+
+        self.processing = False
+        yield
     
