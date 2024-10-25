@@ -4,15 +4,53 @@ from openai import OpenAI
 import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
-from typing import Callable, AsyncGenerator, Any, TypedDict
+from typing import Callable, AsyncGenerator, Any, TypedDict, Optional
 from .settings import settings 
-from .api import API, API_INSTANCES
+import abc 
+from uuid_extensions import uuid7
 
 class QA(rx.Base):
     """A question and answer pair."""
 
+    identifier: str
     question: str
     answer: str
+
+class Chat(rx.Base):
+
+    identifier: str
+    title: str
+    history: list[QA]    
+
+
+class API(abc.ABC):
+
+    @abc.abstractmethod
+    def get_identifier(self) -> str:
+        raise NotImplemented
+
+    @abc.abstractmethod
+    async def generate_title(self, question: str) -> str:
+        raise NotImplemented
+
+    @abc.abstractmethod
+    async def process_chat(self, chat: 'Chat') -> AsyncGenerator[str, None]:
+        raise NotImplemented
+
+    @abc.abstractmethod 
+    async def save_chat(self, chat: 'Chat'):
+        raise NotImplemented
+    
+    @abc.abstractmethod
+    async def delete_chat(self, identifier: str):
+        raise NotImplemented
+    
+    async def set_chat(self, chat_id: str):
+        pass
+
+
+# XXX: not sure if this is good idea
+API_INSTANCES: dict[str, API]={}
 
 
 DEFAULT_CHATS = {
@@ -26,10 +64,10 @@ class State(rx.State):
     """The app state."""
 
     # A dict from the chat name to the list of questions and answers.
-    chats: dict[str, list[QA]] = DEFAULT_CHATS
+    chats: dict[str, Chat] = {}
 
     # The current chat name.
-    current_chat = "Intros"
+    current_chat: Optional[str] = None
 
     # The current question.
     question: str
@@ -37,36 +75,42 @@ class State(rx.State):
     # Whether we are processing the question.
     processing: bool = False
 
-    # The name of the new chat.
-    new_chat_name: str = ""
+    input_value: str = ''
 
-    def create_chat(self):
-        """Create a new chat."""
-        # Add the new chat to the list of chats.
-        self.current_chat = self.new_chat_name
-        self.chats[self.new_chat_name] = []
+    previous_key: str = ''
 
-    def delete_chat(self):
+    multiline: bool = False
+
+    async def new_chat(self):
+        self.current_chat = None
+
+    async def delete_chat(self, api_id: str, chat_id: str):
         """Delete the current chat."""
-        del self.chats[self.current_chat]
-        if len(self.chats) == 0:
-            self.chats = DEFAULT_CHATS
-        self.current_chat = list(self.chats.keys())[0]
+        api = API_INSTANCES[api_id]
+        await api.delete_chat(chat_id)
 
-    def set_chat(self, chat_name: str):
+        del self.chats[self.current_chat]
+        self.current_chat = None
+
+    async def set_chat(self, api_id: str, chat_id: str):
         """Set the name of the current chat.
 
         Args:
             chat_name: The name of the chat.
         """
-        self.current_chat = chat_name
+        api = API_INSTANCES[api_id]
+        await api.set_chat(chat_id)
+        self.current_chat = chat_id
 
     @rx.var
     def rendered_current_chat(self) -> list[QA]:
         res = []
-        for c in self.chats[self.current_chat]:
-            res.append(QA(question=render_markdown(c.question), 
-                     answer=render_markdown(c.answer)))
+        if self.current_chat is None:
+            return []
+        for c in self.chats[self.current_chat].history:
+            res.append(QA(identifier=c.identifier,
+                          question=render_markdown(c.question), 
+                        answer=render_markdown(c.answer)))
         return res
 
     @rx.var
@@ -76,10 +120,11 @@ class State(rx.State):
         Returns:
             The list of chat names.
         """
-        return list(self.chats.keys())
+        return list([c.title for c in self.chats.values()])
 
     async def process_question(self, api_id: str, form_data: dict[str, str]):
         # Get the question from the form
+
         question = form_data["question"]
 
         # Check if the question is empty
@@ -88,6 +133,9 @@ class State(rx.State):
         
         if not question:
             return
+
+        if self.multiline:
+            self.multiline = False
 
         async for value in self._process_question(api_id, question):
             yield value
@@ -101,26 +149,44 @@ class State(rx.State):
         """
     
         # Add the question to the list of questions.
-        qa = QA(question=question, answer="")
-        self.chats[self.current_chat].append(qa)
+        api = API_INSTANCES[api_id]
+        if self.current_chat is None:
+            title = await api.generate_title(question)
+            chat = Chat(identifier=str(uuid7()), title=title, history=[])
+            self.chats[chat.identifier] = chat
+            self.current_chat = chat.identifier
+            yield
+        else:
+            chat = self.chats[self.current_chat]
+
+        qa = QA(identifier=str(uuid7()), question=question, answer="")
+        chat.history.append(qa)
     
         # Clear the input and start the processing.
         self.processing = True
         yield
     
         # Stream the results, yielding after every word.
-        async for answer_text in API_INSTANCES[api_id].answer_question(question, self.chats[self.current_chat]):
+        async for answer_text in api.process_chat(chat):
             # Ensure answer_text is not None before concatenation
             if answer_text is not None:
-                self.chats[self.current_chat][-1].answer += answer_text
+                chat.history[-1].answer += answer_text
             else:
                 # Handle the case where answer_text is None, perhaps log it or assign a default value
                 # For example, assigning an empty string if answer_text is None
                 answer_text = ""
-                self.chats[self.current_chat][-1].answer += answer_text
+                chat.history[-1].answer += answer_text
             self.chats = self.chats
             yield
 
+        await api.save_chat(chat)
         self.processing = False
         yield
-    
+
+    async def on_key_down(self, key: str):
+        if self.previous_key == 'Shift' and key == 'Enter':
+            self.multiline = True
+        elif key == 'Enter' and not self.multiline:
+            yield rx.call_script('document.querySelector("#question-submit").click()')
+        self.previous_key = key
+        yield

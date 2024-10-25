@@ -1,14 +1,13 @@
 import reflex as rx
 import reflex_chakra as rxchakra
-from .components import loading_icon
-from .state import QA, State
+from .components import loading_icon, resizable_textarea
+from .state import QA, State, API, API_INSTANCES
 from . import styles
-from .api import API, API_INSTANCES
 import hashlib
 
 message_style = dict(display="inline-block", padding="1em", border_radius="8px", max_width=["30em", "30em", "50em", "50em", "50em", "50em"])
 
-def menu_item(text: str, url: str) -> rx.Component:
+def menu_item(api_id:str, chat_id: str, title: str) -> rx.Component:
     """Menu item.
 
     Args:
@@ -19,10 +18,10 @@ def menu_item(text: str, url: str) -> rx.Component:
         rx.Component: The menu item component.
     """
     # Whether the item is active.
-    active = (rx.State.router.page.path == url.lower()) 
+    active = (State.current_chat == chat_id)
     return rx.link(
         rx.hstack(
-            rx.text(text, weight="regular"),
+            rx.text(title, weight="regular"),
             style={
                 "_hover": {
                     "background_color": rx.cond(
@@ -53,7 +52,8 @@ def menu_item(text: str, url: str) -> rx.Component:
             )
         ),
         underline="none",
-        href=url,
+        href='#',
+        on_click=lambda: State.set_chat(api_id, chat_id),
         width="100%",
     )
 
@@ -95,7 +95,10 @@ def message(qa: QA) -> rx.Component:
 def chat() -> rx.Component:
     """List all the messages in a single conversation."""
     return rx.vstack(
-        rx.box(rx.foreach(State.rendered_current_chat, message), width="100%"),
+        rx.cond(State.current_chat == None, 
+                rx.box(rx.heading('What can I help with?', align='center'), width="100%", margin_top="200px"), 
+                rx.box(rx.foreach(State.rendered_current_chat, message),
+                width="100%")),
         py="8",
         flex="1",
         width="100%",
@@ -113,16 +116,13 @@ def action_bar(api_id: str) -> rx.Component:
             rxchakra.form(
                 rxchakra.form_control(
                     rx.hstack(
-                        rx.input(
-                            rx.input.slot(
-                                rx.tooltip(
-                                    rx.icon("info", size=18),
-                                    content="Enter a question to get a response.",
-                                )
-                            ),
+                        resizable_textarea(
                             placeholder="Type something...",
                             id="question",
-                            width=["15em", "20em", "45em", "50em", "50em", "50em"],
+                            width=["10em", "15em", "20em", "30em", "45em", "50em"],
+                            auto_height=True,
+                            padding="5pt",
+                            on_key_down=State.on_key_down
                         ),
                         rx.button(
                             rx.cond(
@@ -130,6 +130,7 @@ def action_bar(api_id: str) -> rx.Component:
                                 loading_icon(height="1em"),
                                 rx.text("Send"),
                             ),
+                            id="question-submit",
                             type="submit",
                         ),
                         align_items="center",
@@ -159,10 +160,10 @@ def action_bar(api_id: str) -> rx.Component:
         width="100%",
     )
 
-def history(**props) -> rx.Component:
+def history(api_id: str, **props) -> rx.Component:
     return rx.vstack(
         rx.foreach(
-            State.chats, lambda entry: menu_item(entry[0], '/chat')
+            State.chats, lambda entry: menu_item(api_id, entry[0], entry[1].title)
         ),
         spacing="0",
         **props

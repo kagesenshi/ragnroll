@@ -8,8 +8,7 @@ from typing import Callable, Generator, Type
 
 import reflex as rx
 from .chat import chat, action_bar, history
-from .state import State
-from .api import API, API_INSTANCES
+from .state import State, API, API_INSTANCES
 
 class Babble(rx.ComponentState):
     """A chat component with state."""
@@ -20,8 +19,8 @@ class Babble(rx.ComponentState):
         API_INSTANCES[api_id] = api
         return rx.hstack(
             rx.vstack(
-                rx.button(rx.text('New Chat'), size='2', width="100%"),
-                history(width="100%"),
+                rx.button(rx.text('New Chat'), size='2', width="100%", on_click=State.new_chat),
+                history(api_id, width="100%"),
                 width="20%",
             ),
             rx.vstack(

@@ -1,4 +1,6 @@
 import reflex as rx 
+from reflex.event import key_event, input_event
+from typing import List, Any
 
 class LoadingIcon(rx.Component):
     """A custom loading icon component."""
@@ -18,3 +20,24 @@ class LoadingIcon(rx.Component):
 
 
 loading_icon = LoadingIcon.create
+
+
+class ResizableTextArea(rx.Component):
+    library = 'react-textarea-autosize'
+    tag = "TextareaAutosize"
+    is_default = True
+
+    min_rows: rx.Var[int] = 1
+    max_rows: rx.Var[int] = 10
+    cache_measurements: rx.Var[bool] = False
+    default_value: rx.Var[str] = ""
+
+    on_height_change: rx.EventHandler[input_event]
+    on_change: rx.EventHandler[input_event]
+    on_input: rx.EventHandler[input_event]
+    on_focus: rx.EventHandler[input_event]
+    on_blur: rx.EventHandler[input_event]
+    on_key_down: rx.EventHandler[key_event]
+    on_key_up: rx.EventHandler[key_event]
+
+resizable_textarea = ResizableTextArea.create

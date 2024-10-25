@@ -1,19 +1,21 @@
 from ..templates import template
 import reflex as rx
 from reflex_babble import babble
-from reflex_babble.api import API
-from reflex_babble.ollama import answer_question
-from reflex_babble.state import QA
+from reflex_babble.ollama import OllamaAPI
+from reflex_babble.state import QA, Chat, API, API_INSTANCES
 from typing import AsyncGenerator
+import uuid 
 
-class MyChatAPI(API):
+class MyChatAPI(OllamaAPI):
 
     def get_identifier(self) -> str:
         return 'mychatapi'
 
-    async def answer_question(self, question: str, current_chat: list[QA]) -> AsyncGenerator[str, None]:
-        async for i in answer_question(question, current_chat):
-            yield i
+    async def save_chat(self, chat: Chat):
+        return 
+
+    async def delete_chat(self, identifier: str):
+        return 
 
 @template(route="/chat", title="Chat")
 def chat_page() -> rx.Component:
