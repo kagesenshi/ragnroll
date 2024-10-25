@@ -2,58 +2,63 @@ from .state import State, QA
 import os
 from openai import OpenAI
 from .settings import settings
+from .state import State, QA, Chat, API
+from typing import Any, AsyncGenerator
 
-async def openai_process_question(state: type[State], question: str):
-    """Get the response from the API.
+class OpenAIClient(API):
+    async def generate_title(self, question: str, default: str = "New chat") -> str:
+        messages = [
+            { "role": "user", "content": (
+                f"Summarize the following question into a title with less than 10 words. "
+                f"Answer directly. NEVER wrap your answer with quote nor double quote. "
+                f"Only provide the summarized title. \n" 
+                f"#### START QUESTION ##### \n"
+                f"{question}\n"
+                f"#### END QUESTION #####")},
+            { "role" : "assistant", "content": ""}
+        ]
 
-    Args:
-        form_data: A dict with the current question.
-    """
+        result = OpenAI().chat.completions.create(
+            model=settings.OPENAI_MODEL, 
+            messages=messages
+        )
 
-    # Add the question to the list of questions.
-    qa = QA(question=question, answer="")
-    state.chats[state.current_chat].append(qa)
+        if hasattr(result.choices[0].message, 'content'):
+            answer = result.choices[0].message.content
+            if answer:
+                return answer 
+            return default
+        return default 
 
-    # Clear the input and start the processing.
-    state.processing = True
-    yield
-
-    # Build the messages.
-    messages = [
-        {
-            "role": "system",
-            "content": "You are a friendly chatbot named Reflex. Respond in markdown.",
-        }
-    ]
-    for qa in state.chats[state.current_chat]:
-        messages.append({"role": "user", "content": qa.question})
-        messages.append({"role": "assistant", "content": qa.answer})
-
-    # Remove the last mock answer.
-    messages = messages[:-1]
-
-    # Start a new session to answer the question.
-    session = OpenAI().chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        messages=messages,
-        stream=True,
-    )
-
-    # Stream the results, yielding after every word.
-    for item in session:
-        if hasattr(item.choices[0].delta, "content"):
-            answer_text = item.choices[0].delta.content
-            # Ensure answer_text is not None before concatenation
-            if answer_text is not None:
-                state.chats[state.current_chat][-1].answer += answer_text
-            else:
-                # Handle the case where answer_text is None, perhaps log it or assign a default value
-                # For example, assigning an empty string if answer_text is None
-                answer_text = ""
-                state.chats[state.current_chat][-1].answer += answer_text
-            state.chats = state.chats
-            yield
-
-    # Toggle the processing flag.
-    state.processing = False
+    async def process_chat(self, chat: Chat):
+        # Build the messages.
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a friendly chatbot named Reflex. Respond in markdown.",
+            }
+        ]
+        for qa in chat.history:
+            messages.append({"role": "user", "content": qa.question})
+            messages.append({"role": "assistant", "content": qa.answer})
+    
+        # Remove the last mock answer.
+        messages = messages[:-1]
+    
+        # Start a new session to answer the question.
+        session = OpenAI().chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=messages,
+            stream=True,
+        )
+    
+        # Stream the results, yielding after every word.
+        for item in session:
+            if hasattr(item.choices[0].delta, "content"):
+                answer_text = item.choices[0].delta.content
+                # Ensure answer_text is not None before concatenation
+                if not answer_text:
+                    continue
+                else:
+                    yield answer_text
     

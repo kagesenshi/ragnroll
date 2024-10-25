@@ -1,12 +1,13 @@
 from ..templates import template
 import reflex as rx
 from reflex_babble import babble
-from reflex_babble.ollama import OllamaAPI
+from reflex_babble.ollama import OllamaClient
+from reflex_babble.openai import OpenAIClient
 from reflex_babble.state import QA, Chat, API, API_INSTANCES
 from typing import AsyncGenerator
 import uuid 
 
-class MyChatAPI(OllamaAPI):
+class MyChatAPI(OpenAIClient):
 
     def get_identifier(self) -> str:
         return 'mychatapi'

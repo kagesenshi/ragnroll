@@ -5,7 +5,7 @@ from .settings import settings
 import os
 
 
-class OllamaAPI(API):
+class OllamaClient(API):
 
     async def generate_title(self, question: str, default: str = "New chat") -> str:
         messages = [
@@ -19,7 +19,10 @@ class OllamaAPI(API):
             { "role" : "assistant", "content": ""}
         ]
 
-        result: dict[str, Any] = await ollama.AsyncClient().chat(model=settings.OLLAMA_MODEL, messages=messages)
+        result: dict[str, Any] = await ollama.AsyncClient().chat(
+            model=settings.OLLAMA_MODEL, 
+            messages=messages
+        )
         message = result.get("message", None)
         if message:
             if not message:
