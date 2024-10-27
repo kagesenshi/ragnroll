@@ -124,3 +124,16 @@ class ExtendedResult(Result, typing.Generic[T, M]):
 
 class SearchResult(Result[list[SearchResultItem]]):
     pass
+
+class ChatMessage(pydantic.BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(pydantic.BaseModel):
+    model: str 
+    messages: list[ChatMessage]
+    stream: bool = False
+
+class ChatResponse(pydantic.BaseModel):
+    model: str
+    message: ChatMessage

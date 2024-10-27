@@ -1,12 +1,11 @@
-import ollama
-from .state import State, QA, Chat, API
-from typing import Any, AsyncGenerator
-from .settings import settings
+from ..state import State, QA
 import os
+from openai import OpenAI
+from ..settings import settings
+from ..state import State, QA, Chat, API
+from typing import Any, AsyncGenerator
 
-
-class OllamaClient(API):
-
+class OpenAIClient(API):
     async def generate_title(self, question: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
@@ -19,29 +18,26 @@ class OllamaClient(API):
             { "role" : "assistant", "content": ""}
         ]
 
-        result: dict[str, Any] = await ollama.AsyncClient().chat(
-            model=settings.OLLAMA_MODEL, 
+        result = OpenAI().chat.completions.create(
+            model=settings.OPENAI_MODEL, 
             messages=messages
         )
-        message = result.get("message", None)
-        if message:
-            if not message:
-                return default
-            if message["role"] != "assistant":
-                return default
-            if message["content"]:
-                return message["content"]
-        return default
-    
-    async def process_chat(self, chat: Chat) -> AsyncGenerator[str, None]:
+
+        if hasattr(result.choices[0].message, 'content'):
+            answer = result.choices[0].message.content
+            if answer:
+                return answer 
+            return default
+        return default 
+
+    async def process_chat(self, chat: Chat):
         # Build the messages.
         messages = [
             {
                 "role": "system",
                 "content": "You are a friendly chatbot named Reflex. Respond in markdown.",
-            },
+            }
         ]
-        
         for qa in chat.history:
             messages.append({"role": "user", "content": qa.question})
             messages.append({"role": "assistant", "content": qa.answer})
@@ -50,19 +46,19 @@ class OllamaClient(API):
         messages = messages[:-1]
     
         # Start a new session to answer the question.
-        session: list[dict[str, Any]] = await ollama.AsyncClient().chat(
-            model=settings.OLLAMA_MODEL,
+        session = OpenAI().chat.completions.create(
+            model=settings.OPENAI_MODEL,
             messages=messages,
             stream=True,
         )
     
         # Stream the results, yielding after every word.
-        async for item in session:
-            message = item.get('message', None)
-            if not message:
-                continue 
-            if message['role'] != 'assistant':
-                continue
-            if message['content']:
-                answer_text = message['content']
-                yield answer_text
+        for item in session:
+            if hasattr(item.choices[0].delta, "content"):
+                answer_text = item.choices[0].delta.content
+                # Ensure answer_text is not None before concatenation
+                if not answer_text:
+                    continue
+                else:
+                    yield answer_text
+    

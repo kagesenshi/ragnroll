@@ -30,7 +30,7 @@ class API(abc.ABC):
         raise NotImplemented
 
     @abc.abstractmethod
-    async def generate_title(self, question: str) -> str:
+    async def generate_title(self, question: str, default: str = 'New chat') -> str:
         raise NotImplemented
 
     @abc.abstractmethod
@@ -141,7 +141,7 @@ class State(rx.State):
             yield value
 
 
-    async def _process_question(self, api_id: str, question: str):
+    async def _process_question(self, api_id: str, question: str, default_title: str = 'New chat'):
         """Get the response from the API.
     
         Args:
@@ -151,11 +151,12 @@ class State(rx.State):
         # Add the question to the list of questions.
         api = API_INSTANCES[api_id]
         if self.current_chat is None:
-            title = await api.generate_title(question)
-            chat = Chat(identifier=str(uuid7()), title=title, history=[])
+
+            chat = Chat(identifier=str(uuid7()), title=default_title, history=[])
             self.chats[chat.identifier] = chat
             self.current_chat = chat.identifier
             yield
+
         else:
             chat = self.chats[self.current_chat]
 
@@ -164,6 +165,10 @@ class State(rx.State):
     
         # Clear the input and start the processing.
         self.processing = True
+        yield
+
+        title = await api.generate_title(question, default=default_title)
+        self.chats[chat.identifier].title = title
         yield
     
         # Stream the results, yielding after every word.
