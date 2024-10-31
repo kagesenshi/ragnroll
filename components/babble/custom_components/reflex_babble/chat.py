@@ -1,13 +1,66 @@
 import reflex as rx
 import reflex_chakra as rxchakra
-from .components import loading_icon, resizable_textarea
-from .state import QA, State, API, API_INSTANCES
+from .components import loading_icon, resizable_textarea, three_dots_loading_icon
+from .state import State, API, API_INSTANCES, ChatMessage, Chat
 from . import styles
 import hashlib
 
-message_style = dict(display="inline-block", padding="1em", border_radius="8px", max_width=["30em", "30em", "50em", "50em", "50em", "50em"])
+message_style = dict(
+    display="inline-block",
+    padding="1em",
+    border_radius="8px",
+    max_width=["30em", "30em", "50em", "50em", "50em", "50em"],
+)
 
-def menu_item(api_id:str, chat_id: str, title: str) -> rx.Component:
+
+def dropdown_menu(chat_title: str, api_id: str, chat_id: str):
+    return rx.menu.root(
+        rx.menu.trigger(rx.icon("ellipsis-vertical")),
+        rx.menu.content(
+            rx.dialog.root(
+                rx.dialog.trigger(
+                    rx.box(
+                        "Delete",
+                        width="100%",
+                        style={
+                            "_hover": {
+                                "background_color": rx.color("accent", 10),
+                                "color": rx.color("accent", 1),
+                                "cursor": "pointer",
+                            }
+                        },
+                        class_name="rt-BaseMenuItem rt-DropdownMenuItem",
+                    )
+                ),
+                rx.dialog.content(
+                    rx.dialog.title("Delete chat?"),
+                    rx.dialog.description(
+                        "Are you sure you want to delete this chat titled : "
+                        + chat_title
+                    ),
+                    rx.vstack(
+                        rx.divider(),
+                        rx.hstack(
+                            rx.dialog.close(
+                                rx.button(
+                                    "Yes",
+                                    size="3",
+                                    variant="outline",
+                                    on_click=lambda: State.delete_chat(
+                                        api_id, chat_id
+                                    ).debounce(500),
+                                )
+                            ),
+                            rx.dialog.close(rx.button("No", size="3")),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def menu_item(api_id: str, chat_id: str, title: str) -> rx.Component:
     """Menu item.
 
     Args:
@@ -18,47 +71,48 @@ def menu_item(api_id:str, chat_id: str, title: str) -> rx.Component:
         rx.Component: The menu item component.
     """
     # Whether the item is active.
-    active = (State.current_chat == chat_id)
-    return rx.link(
-        rx.hstack(
-            rx.text(title, weight="regular"),
-            style={
-                "_hover": {
-                    "background_color": rx.cond(
-                        active,
-                        styles.accent_bg_color,
-                        styles.gray_bg_color,
-                    ),
-                    "color": rx.cond(
-                        active,
-                        styles.accent_text_color,
-                        styles.text_color,
-                    ),
-                },
-                "opacity": rx.cond(
-                    active,
-                    "1",
-                    "0.95",
-                ),
-            },
-            align="center",
+    active = State.current_chat == chat_id
+    return rx.hstack(
+        rx.text(
+            title, weight="regular",
             width="100%",
-            border_radius=styles.border_radius,
-            padding="0.35em",
-            opacity=rx.cond(
+            on_click=lambda: State.set_chat(api_id, chat_id),
+        ),
+        rx.spacer(),
+        dropdown_menu(title, api_id, chat_id),
+        style={
+            "_hover": {
+                "background_color": rx.cond(
+                    active,
+                    styles.accent_bg_color,
+                    styles.gray_bg_color,
+                ),
+                "color": rx.cond(
+                    active,
+                    styles.accent_text_color,
+                    styles.text_color,
+                ),
+                "cursor": "pointer"
+            },
+            "opacity": rx.cond(
                 active,
                 "1",
-                "0.8",
-            )
-        ),
-        underline="none",
-        href='#',
-        on_click=lambda: State.set_chat(api_id, chat_id),
+                "0.95",
+            ),
+        },
+        align="center",
         width="100%",
+        border_radius=styles.border_radius,
+        padding="0.35em",
+        opacity=rx.cond(
+            active,
+            "1",
+            "0.8",
+        ),
     )
 
 
-def message(qa: QA) -> rx.Component:
+def message(message: ChatMessage) -> rx.Component:
     """A single question/answer message.
 
     Args:
@@ -68,25 +122,31 @@ def message(qa: QA) -> rx.Component:
         A component displaying the question/answer pair.
     """
     return rx.box(
-        rx.box(
-            rx.html(
-                qa.question,
-                background_color=rx.color("mauve", 4),
-                color=rx.color("mauve", 12),
-                **message_style,
+        rx.cond(
+            message.role == "user",
+            rx.box(
+                rx.html(
+                    message.message,
+                    background_color=rx.color("mauve", 4),
+                    color=rx.color("mauve", 12),
+                    **message_style,
+                ),
+                text_align="right",
+                margin_top="1em",
             ),
-            text_align="right",
-            margin_top="1em",
         ),
-        rx.box(
-            rx.html(
-                qa.answer,
-                background_color=rx.color("accent", 4),
-                color=rx.color("accent", 12),
-                **message_style,
+        rx.cond(
+            message.role == "assistant",
+            rx.box(
+                rx.html(
+                    message.message,
+                    background_color=rx.color("accent", 4),
+                    color=rx.color("accent", 12),
+                    **message_style,
+                ),
+                text_align="left",
+                padding_top="1em",
             ),
-            text_align="left",
-            padding_top="1em",
         ),
         width="100%",
     )
@@ -95,10 +155,26 @@ def message(qa: QA) -> rx.Component:
 def chat() -> rx.Component:
     """List all the messages in a single conversation."""
     return rx.vstack(
-        rx.cond(State.current_chat == None, 
-                rx.box(rx.heading('What can I help with?', align='center'), width="100%", margin_top="200px"), 
-                rx.box(rx.foreach(State.rendered_current_chat, message),
-                width="100%")),
+        rx.cond(
+            State.current_chat == None,
+            rx.box(
+                rx.heading("What can I help with?", align="center"),
+                width="100%",
+                margin_top="200px",
+            ),
+            rx.box(
+                rx.foreach(State.rendered_current_chat, message),
+                rx.cond(
+                    State.processing,
+                    rx.box(
+                        three_dots_loading_icon(height="0.5em"),
+                        text_align="left",
+                        padding_top="1em",
+                    ),
+                ),
+                width="100%",
+            ),
+        ),
         py="8",
         flex="1",
         width="100%",
@@ -122,7 +198,7 @@ def action_bar(api_id: str) -> rx.Component:
                             width=["10em", "15em", "20em", "30em", "45em", "50em"],
                             auto_height=True,
                             padding="5pt",
-                            on_key_down=State.on_key_down
+                            on_key_down=State.on_key_down,
                         ),
                         rx.button(
                             rx.cond(
@@ -148,6 +224,7 @@ def action_bar(api_id: str) -> rx.Component:
             ),
             align_items="center",
         ),
+        on_mount=lambda : State.load_chats(api_id),
         position="sticky",
         bottom="0",
         left="0",
@@ -160,11 +237,12 @@ def action_bar(api_id: str) -> rx.Component:
         width="100%",
     )
 
+
 def history(api_id: str, **props) -> rx.Component:
     return rx.vstack(
         rx.foreach(
-            State.chats, lambda entry: menu_item(api_id, entry[0], entry[1].title)
+            State.sorted_chats, lambda entry: menu_item(api_id, entry.identifier, entry.title)
         ),
         spacing="0",
-        **props
+        **props,
     )

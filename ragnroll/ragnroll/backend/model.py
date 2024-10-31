@@ -137,3 +137,59 @@ class ChatRequest(pydantic.BaseModel):
 class ChatResponse(pydantic.BaseModel):
     model: str
     message: ChatMessage
+
+class ChatHistoryMessage(pydantic.BaseModel):
+    identifier: str
+    timestamp: str
+    role: str 
+    message: str 
+
+class ChatHistory(pydantic.BaseModel):
+    identifier: str 
+    title: str 
+    timestamp: str
+    history: list[ChatHistoryMessage]
+
+
+class OIDCConfiguration(pydantic.BaseModel):
+    issuer: str
+    authorization_endpoint: str
+    token_endpoint: str
+    userinfo_endpoint: str
+    jwks_uri: str
+    response_types_supported: list[str]
+    subject_types_supported: list[str]
+    id_token_signing_alg_values_supported: list[str]
+    scopes_supported: list[str]
+    token_endpoint_auth_methods_supported: list[str]
+    claims_supported: list[str]
+
+class RealmAccess(pydantic.BaseModel):
+    roles: list[str] | None
+
+class ResourceAccess(pydantic.BaseModel):
+    roles: list[str] | None
+
+class OIDCAccessToken(pydantic.BaseModel):
+    exp: int | None = None
+    iat: int | None = None
+    jti: str | None = None
+    iss: str | None = None
+    aud: str | None = None
+    sub: str | None = None
+    typ: str | None = None
+    azp: str | None = None
+    session_state: str | None = None
+    acr: str | None = None
+    allowed_origins: list[str] | None = None
+    realm_access: RealmAccess | None = None
+    resource_access: dict[str, ResourceAccess] | None = None
+    scope: str | None = None
+    sid: str | None = None
+    email_verified: bool | None = None
+    roles: list[str] | None = pydantic.Field(None, validation_alias=pydantic.AliasChoices('roles','groups'))
+    name: str | None = None
+    preferred_username: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    email: str | None = None

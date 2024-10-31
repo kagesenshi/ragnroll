@@ -1,5 +1,5 @@
 import ollama
-from ..state import State, QA, Chat, API
+from ..state import State, Chat, API
 from typing import Any, AsyncGenerator
 from ..settings import settings
 import os
@@ -42,9 +42,8 @@ class OllamaClient(API):
             },
         ]
         
-        for qa in chat.history:
-            messages.append({"role": "user", "content": qa.question})
-            messages.append({"role": "assistant", "content": qa.answer})
+        for msg in chat.history:
+            messages.append({"role": msg.role, "content": msg.message})
     
         # Remove the last mock answer.
         messages = messages[:-1]

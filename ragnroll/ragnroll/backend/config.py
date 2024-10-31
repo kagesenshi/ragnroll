@@ -13,5 +13,6 @@ class Settings(pydantic_settings.BaseSettings):
     OPENAI_API_KEY: str
     DEBUG: bool = False
     ALLOW_FALLBACK: bool = True
+    OAUTH_DISCOVERY_URL: typing.Optional[str] = ''
 
 settings = Settings()

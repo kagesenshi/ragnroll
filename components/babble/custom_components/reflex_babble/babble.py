@@ -20,6 +20,7 @@ class Babble(rx.ComponentState):
         return rx.hstack(
             rx.vstack(
                 rx.button(rx.text('New Chat'), size='2', width="100%", on_click=State.new_chat),
+                rx.cond(State.chats, rx.text.strong("Recent chats")),
                 history(api_id, width="100%"),
                 width="20%",
             ),

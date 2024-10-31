@@ -1,2 +1,2 @@
 from .babble import *
-from .state import QA, Chat, API_INSTANCES, API
+from .state import Chat, ChatMessage, API_INSTANCES, API

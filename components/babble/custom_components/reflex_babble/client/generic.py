@@ -1,5 +1,5 @@
 import requests
-from ..state import State, QA, Chat, API
+from ..state import State, Chat, ChatMessage, API
 from typing import Any, AsyncGenerator, Optional
 from ..settings import settings
 import os
@@ -54,9 +54,8 @@ class GenericClient(API):
             },
         ]
         
-        for qa in chat.history:
-            messages.append({"role": "user", "content": qa.question})
-            messages.append({"role": "assistant", "content": qa.answer})
+        for msg in chat.history:
+            messages.append({"role": msg.role, "content": msg.message})
     
         # Remove the last mock answer.
         messages = messages[:-1]

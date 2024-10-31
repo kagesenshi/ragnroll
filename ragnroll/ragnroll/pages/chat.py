@@ -4,20 +4,54 @@ from reflex_babble import babble
 from reflex_babble.client.ollama import OllamaClient
 from reflex_babble.client.openai import OpenAIClient
 from reflex_babble.client.generic import GenericClient
-from reflex_babble.state import QA, Chat, API, API_INSTANCES
+from reflex_babble.state import Chat, API, API_INSTANCES, ChatMessage
 from typing import AsyncGenerator
 from rxconfig import config
+import httpx
 import os
 
 class ChatClient(GenericClient):
 
     def get_identifier(self) -> str:
-        return 'mychatapi'
+        return 'ragnroll-chat'
 
     async def save_chat(self, chat: Chat):
+        async with httpx.AsyncClient() as client:
+            resp = await client.put(f'{config.api_url}/chat/session/{chat.identifier}',
+                json={
+                    'identifier': chat.identifier,
+                    'title': chat.title,
+                    'timestamp': chat.timestamp.isoformat(),
+                    'history': [{
+                        'identifier': r.identifier,
+                        'timestamp': r.timestamp.isoformat(),
+                        'role': r.role,
+                        'message': r.message
+                    } for r in chat.history]
+                })
         return 
+    
+    async def load_chats(self) -> list[Chat]:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f'{config.api_url}/chat/recent')
+            result = resp.json()
+        return [
+            Chat(
+                identifier=r['identifier'],
+                timestamp=r['timestamp'],
+                title=r['title'],
+                history=[
+                    ChatMessage(identifier=m['identifier'],
+                                timestamp=m['timestamp'],
+                                role=m['role'],
+                                message=m['message']) 
+                    for m in r['history']                   
+                ]
+            ) for r in result['data']
+        ]
 
     async def delete_chat(self, identifier: str):
+        print("Deleting chat...")
         return 
 
 @template(route="/chat", title="Chat")
@@ -29,7 +63,7 @@ def chat_page() -> rx.Component:
     """
     return rx.vstack(
         rx.heading("Chat", size="5"),
-        babble(api=ChatClient(endpoint=f'{config.api_url}/chat', model=os.environ['OLLAMA_MODEL']), width="100%"),
+        babble(api=ChatClient(endpoint=f'{config.api_url}/chat/completion', model=os.environ['OLLAMA_MODEL']), width="100%"),
         spacing="8",
         width="100%",
     )

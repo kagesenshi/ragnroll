@@ -1,8 +1,7 @@
-from ..state import State, QA
 import os
 from openai import OpenAI
 from ..settings import settings
-from ..state import State, QA, Chat, API
+from ..state import State, Chat, API
 from typing import Any, AsyncGenerator
 
 class OpenAIClient(API):
@@ -38,9 +37,9 @@ class OpenAIClient(API):
                 "content": "You are a friendly chatbot named Reflex. Respond in markdown.",
             }
         ]
-        for qa in chat.history:
-            messages.append({"role": "user", "content": qa.question})
-            messages.append({"role": "assistant", "content": qa.answer})
+
+        for msg in chat.history:
+            messages.append({"role": msg.role, "content": msg.message})
     
         # Remove the last mock answer.
         messages = messages[:-1]

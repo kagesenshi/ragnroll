@@ -1,6 +1,7 @@
 from . import settings
 import fastapi
 import neo4j
+from typing import AsyncGenerator, Annotated
 
 def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
     existing = getattr(request.state, 'neo4j_connection', None)
@@ -35,5 +36,8 @@ def connect(request: fastapi.Request) -> neo4j.AsyncDriver:
     request.state.neo4j_connection = driver
     return driver
 
-async def session(request: fastapi.Request) -> neo4j.AsyncSession:
-    return connect(request).session()
+async def session(request: fastapi.Request):
+    async with connect(request).session() as session:
+        yield session
+
+Session = Annotated[neo4j.AsyncSession, fastapi.Depends(session)]
