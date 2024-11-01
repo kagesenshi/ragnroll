@@ -1,7 +1,7 @@
 import reflex as rx
 import reflex_chakra as rxchakra
 from .components import loading_icon, resizable_textarea, three_dots_loading_icon
-from .state import State, API, API_INSTANCES, ChatMessage, Chat
+from .state import ChatStateMixin, ChatMessage, Chat
 from . import styles
 import hashlib
 
@@ -13,7 +13,7 @@ message_style = dict(
 )
 
 
-def dropdown_menu(chat_title: str, api_id: str, chat_id: str):
+def dropdown_menu(chat_title: str, state_cls: type[ChatStateMixin], chat_id: str):
     return rx.menu.root(
         rx.menu.trigger(rx.icon("ellipsis-vertical")),
         rx.menu.content(
@@ -46,7 +46,7 @@ def dropdown_menu(chat_title: str, api_id: str, chat_id: str):
                                     "Yes",
                                     size="3",
                                     variant="outline",
-                                    on_click=lambda: State.delete_chat(
+                                    on_click=lambda: state_cls.delete_chat_handler(
                                         chat_id
                                     ).debounce(500),
                                 )
@@ -60,7 +60,7 @@ def dropdown_menu(chat_title: str, api_id: str, chat_id: str):
     )
 
 
-def menu_item(api_id: str, chat_id: str, title: str) -> rx.Component:
+def menu_item(state_cls: type[ChatStateMixin], chat_id: str, title: str) -> rx.Component:
     """Menu item.
 
     Args:
@@ -71,15 +71,15 @@ def menu_item(api_id: str, chat_id: str, title: str) -> rx.Component:
         rx.Component: The menu item component.
     """
     # Whether the item is active.
-    active = State.current_chat == chat_id
+    active = state_cls.current_chat == chat_id
     return rx.hstack(
         rx.text(
             title, weight="regular",
             width="100%",
-            on_click=lambda: State.set_chat(chat_id),
+            on_click=lambda: state_cls.set_chat_handler(chat_id),
         ),
         rx.spacer(),
-        dropdown_menu(title, api_id, chat_id),
+        dropdown_menu(title, state_cls, chat_id),
         style={
             "_hover": {
                 "background_color": rx.cond(
@@ -152,20 +152,20 @@ def message(message: ChatMessage) -> rx.Component:
     )
 
 
-def chat() -> rx.Component:
+def chat(state_cls: type[ChatStateMixin]) -> rx.Component:
     """List all the messages in a single conversation."""
     return rx.vstack(
         rx.cond(
-            State.current_chat == None,
+            state_cls.current_chat == None,
             rx.box(
                 rx.heading("What can I help with?", align="center"),
                 width="100%",
                 margin_top="200px",
             ),
             rx.box(
-                rx.foreach(State.rendered_current_chat, message),
+                rx.foreach(state_cls.rendered_current_chat, message),
                 rx.cond(
-                    State.processing,
+                    state_cls.processing,
                     rx.box(
                         three_dots_loading_icon(height="0.5em"),
                         text_align="left",
@@ -186,7 +186,7 @@ def chat() -> rx.Component:
     )
 
 
-def action_bar(api_id: str) -> rx.Component:
+def action_bar(state_cls: type[ChatStateMixin]) -> rx.Component:
     return rx.center(
         rx.vstack(
             rxchakra.form(
@@ -198,11 +198,11 @@ def action_bar(api_id: str) -> rx.Component:
                             width=["10em", "15em", "20em", "30em", "45em", "50em"],
                             auto_height=True,
                             padding="5pt",
-                            on_key_down=State.on_key_down,
+                            on_key_down=state_cls.on_key_down,
                         ),
                         rx.button(
                             rx.cond(
-                                State.processing,
+                                state_cls.processing,
                                 loading_icon(height="1em"),
                                 rx.text("Send"),
                             ),
@@ -211,9 +211,9 @@ def action_bar(api_id: str) -> rx.Component:
                         ),
                         align_items="center",
                     ),
-                    is_disabled=State.processing,
+                    is_disabled=state_cls.processing,
                 ),
-                on_submit=lambda form_data: State.process_question(form_data),
+                on_submit=lambda form_data: state_cls.process_question_handler(form_data),
                 reset_on_submit=True,
             ),
             rx.text(
@@ -224,7 +224,6 @@ def action_bar(api_id: str) -> rx.Component:
             ),
             align_items="center",
         ),
-        on_mount=lambda : State.set_api_id(api_id),
         position="sticky",
         bottom="0",
         left="0",
@@ -238,10 +237,10 @@ def action_bar(api_id: str) -> rx.Component:
     )
 
 
-def history(api_id: str, **props) -> rx.Component:
+def history(state_cls: type[ChatStateMixin], **props) -> rx.Component:
     return rx.vstack(
         rx.foreach(
-            State.sorted_chats, lambda entry: menu_item(api_id, entry.identifier, entry.title)
+            state_cls.sorted_chats, lambda entry: menu_item(state_cls, entry.identifier, entry.title)
         ),
         spacing="0",
         **props,

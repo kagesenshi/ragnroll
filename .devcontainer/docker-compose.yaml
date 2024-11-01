@@ -34,6 +34,12 @@ services:
       - ./neo4j-logs:/logs
     tmpfs:
       - /var/lib/neo4j/run/
+  redis:
+    read_only: true
+    image: docker.io/redis:alpine
+    command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
+    volumes:
+    - ./redis-data:/data
 volumes:
   neo4j-data:
   neo4j-import:

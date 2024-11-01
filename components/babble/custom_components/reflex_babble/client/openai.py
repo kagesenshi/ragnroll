@@ -1,11 +1,11 @@
 import os
 from openai import OpenAI
 from ..settings import settings
-from ..state import State, Chat, API
+from ..state import ChatStateMixin, Chat
 from typing import Any, AsyncGenerator
 
-class OpenAIClient(API):
-    async def generate_title(self, state: State, question: str, default: str = "New chat") -> str:
+class OpenAIClient(object):
+    async def generate_title(self, state: ChatStateMixin, question: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
                 f"Summarize the following question into a title with less than 10 words. "
@@ -29,7 +29,7 @@ class OpenAIClient(API):
             return default
         return default 
 
-    async def process_chat(self, state: State, chat: Chat):
+    async def process_chat(self, state: ChatStateMixin, chat: Chat):
         # Build the messages.
         messages = [
             {

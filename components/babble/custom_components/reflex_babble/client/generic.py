@@ -1,20 +1,19 @@
 import requests
-from ..state import State, Chat, ChatMessage, API
+from ..state import ChatStateMixin, Chat, ChatMessage
 from typing import Any, AsyncGenerator, Optional
 from ..settings import settings
 import os
 import httpx
 import json
+import reflex as rx
+from rxconfig import config
 
+class GenericClient(ChatStateMixin, mixin=True):
 
-class GenericClient(API):
+    endpoint: str = f'{config.api_url}/chat/completion'
+    model: str = settings.OLLAMA_MODEL
 
-    def __init__(self, endpoint: str, model: str, stream_endpoint: Optional[str] = None):
-        self.endpoint = endpoint
-        self.stream_endpoint = stream_endpoint or endpoint
-        self.model = model
-
-    async def generate_title(self, state: State, question: str, default: str = "New chat") -> str:
+    async def generate_title(self, question: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
                 f"Summarize the following question into a title with less than 10 words. "
@@ -26,7 +25,7 @@ class GenericClient(API):
             { "role" : "assistant", "content": ""}
         ]
 
-        conn_opts = await self.httpx_connection_options(state)
+        conn_opts = await self.httpx_connection_options()
         async with httpx.AsyncClient(**conn_opts) as client:
             resp: httpx.Response = await client.post(self.endpoint,json={
                 'model': self.model,
@@ -43,7 +42,7 @@ class GenericClient(API):
                 return message["content"]
         return default
     
-    async def process_chat(self, state: State, chat: Chat) -> AsyncGenerator[str, None]:
+    async def process_chat(self, chat: Chat) -> AsyncGenerator[str, None]:
         # Build the messages.
         messages = [
             {
@@ -59,7 +58,7 @@ class GenericClient(API):
         messages = messages[:-1]
     
         # Start a new session to answer the question.
-        conn_opts = await self.httpx_connection_options(state)
+        conn_opts = await self.httpx_connection_options()
         async with httpx.AsyncClient(**conn_opts) as client:
             async with client.stream('POST', self.endpoint, json={
                 'model': self.model,

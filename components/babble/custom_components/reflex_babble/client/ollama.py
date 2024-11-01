@@ -1,13 +1,13 @@
 import ollama
-from ..state import State, Chat, API
+from ..state import ChatStateMixin, Chat
 from typing import Any, AsyncGenerator
 from ..settings import settings
 import os
 
 
-class OllamaClient(API):
+class OllamaClient(object):
 
-    async def generate_title(self, state: State, question: str, default: str = "New chat") -> str:
+    async def generate_title(self, state: ChatStateMixin, question: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
                 f"Summarize the following question into a title with less than 10 words. "
@@ -33,7 +33,7 @@ class OllamaClient(API):
                 return message["content"]
         return default
     
-    async def process_chat(self, state: State, chat: Chat) -> AsyncGenerator[str, None]:
+    async def process_chat(self, state: ChatStateMixin, chat: Chat) -> AsyncGenerator[str, None]:
         # Build the messages.
         messages = [
             {

@@ -1,7 +1,7 @@
 from .oidc import oidc_auth_provider
 from ..backend.config import settings
 from ..backend.authn import oidc_configuration, decode_token
-from reflex_babble.state import State as ChatState
+
 from rxconfig import config 
 import httpx
 import reflex as rx
@@ -21,10 +21,12 @@ class State(rx.State):
         return f'{self.token_type or "Bearer"} {self.id_token}'
 
     async def reload_states(self):
-        chatstate: ChatState = await self.get_state(ChatState)
-        async for i in chatstate.load_chats():
-            yield i
- 
+        #from ..pages.chat import ChatClient
+        #chatstate: ChatClient = await self.get_state(ChatClient)
+        #async for i in chatstate.load_chats_handler():
+        #    yield i
+        yield
+
     async def refresh_token(self):
         if not self.id_token:
             self.logged_in = False

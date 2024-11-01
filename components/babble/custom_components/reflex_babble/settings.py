@@ -7,5 +7,6 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = 'mistral-nemo:12b-instruct-2407-q4_K_M'
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = 'gpt-3.5-turbo'
+    CHAT_CONNECTION_TIMEOUT: int = 300
 
 settings = Settings()
