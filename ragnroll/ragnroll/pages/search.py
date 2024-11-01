@@ -5,7 +5,9 @@ from ..views.search import SearchState, SearchResultItem
 from ..components.snippet.text import text_snippet
 from ..components.snippet.barchart import barchart_snippet
 from ..components.snippet.table import table_snippet
-
+from ..components.oidc import oidc_auth_provider
+from ..backend.config import settings
+from rxconfig import config
 
 def render_snippet(item: SearchResultItem):
     return rx.match(item.visualization,
@@ -29,7 +31,6 @@ def wrap_search(component: rx.Component) -> rx.Component:
         ),
         component,
     )
-
 
 
 

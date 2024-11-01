@@ -13,6 +13,9 @@ class Settings(pydantic_settings.BaseSettings):
     OPENAI_API_KEY: str
     DEBUG: bool = False
     ALLOW_FALLBACK: bool = True
-    OAUTH_DISCOVERY_URL: typing.Optional[str] = ''
+    AUTHN_METHOD: typing.Optional[typing.Literal['oidc', 'dummy']] = None
+    OIDC_CLIENT_ID: typing.Optional[str] = None
+    OIDC_CLIENT_SECRET: typing.Optional[str] = None
+    OIDC_DISCOVERY_URL: typing.Optional[str] = None
 
 settings = Settings()

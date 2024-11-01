@@ -32,27 +32,30 @@ class API(abc.ABC):
     def get_identifier(self) -> str:
         raise NotImplemented
 
+    async def httpx_connection_options(self, state: 'State') -> dict[str, Any]:
+        return {}
+
     @abc.abstractmethod
-    async def generate_title(self, question: str, default: str = 'New chat') -> str:
+    async def generate_title(self, state: 'State', question: str, default: str = 'New chat') -> str:
         raise NotImplemented
 
     @abc.abstractmethod
-    async def process_chat(self, chat: 'Chat') -> AsyncGenerator[str, None]:
+    async def process_chat(self, state: 'State', chat: 'Chat') -> AsyncGenerator[str, None]:
         raise NotImplemented
 
     @abc.abstractmethod 
-    async def save_chat(self, chat: 'Chat'):
+    async def save_chat(self, state: 'State', chat: 'Chat'):
         raise NotImplemented
     
     @abc.abstractmethod
-    async def delete_chat(self, identifier: str):
+    async def delete_chat(self, state: 'State', identifier: str):
         raise NotImplemented
     
-    async def set_chat(self, chat_id: str):
+    async def set_chat(self, state: 'State', chat_id: str):
         pass
 
     @abc.abstractmethod
-    async def load_chats(self) -> list[Chat]:
+    async def load_chats(self, state: 'State') -> list[Chat]:
         pass
 
 # XXX: not sure if this is good idea
@@ -82,31 +85,36 @@ class State(rx.State):
 
     multiline: bool = False
 
+    api_id: str
+
     async def new_chat(self):
         self.current_chat = None
 
-    async def delete_chat(self, api_id: str, chat_id: str):
+    async def delete_chat(self, chat_id: str):
         """Delete the current chat."""
-        api = API_INSTANCES[api_id]
+        api = API_INSTANCES[self.api_id]
         if self.current_chat == chat_id:
             self.current_chat = None
             yield
-        await api.delete_chat(chat_id)
+        await api.delete_chat(self, chat_id)
         self.chats = {}
 
-    async def set_chat(self, api_id: str, chat_id: str):
+    async def set_chat(self, chat_id: str):
         """Set the name of the current chat.
 
         Args:
             chat_name: The name of the chat.
         """
-        api = API_INSTANCES[api_id]
-        await api.set_chat(chat_id)
+        api = API_INSTANCES[self.api_id]
+        await api.set_chat(self, chat_id)
         self.current_chat = chat_id
 
-    async def load_chats(self, api_id: str):
-        api = API_INSTANCES[api_id]
-        chats = await api.load_chats()
+    async def load_chats(self):
+        if self.chats:
+            return 
+
+        api = API_INSTANCES[self.api_id]
+        chats = await api.load_chats(self)
         if len(chats) == 0:
             self.current_chat = None
             yield
@@ -132,7 +140,7 @@ class State(rx.State):
             )
         return res
 
-    async def process_question(self, api_id: str, form_data: dict[str, str]):
+    async def process_question(self, form_data: dict[str, str]):
         # Get the question from the form
 
         question = form_data["question"]
@@ -147,10 +155,10 @@ class State(rx.State):
         if self.multiline:
             self.multiline = False
 
-        async for value in self._process_question(api_id, question):
+        async for value in self._process_question(question):
             yield value
 
-    async def _process_question(self, api_id: str, question: str, default_title: str = 'New chat'):
+    async def _process_question(self, question: str, default_title: str = 'New chat'):
         """Get the response from the API.
     
         Args:
@@ -159,7 +167,7 @@ class State(rx.State):
 
         # Add the question to the list of questions.
         new_chat = False
-        api = API_INSTANCES[api_id]
+        api = API_INSTANCES[self.api_id]
         if self.current_chat is None:
 
             chat = Chat(identifier=str(uuid7()), title=default_title, history=[], timestamp=datetime.now(pytz.UTC))
@@ -207,7 +215,7 @@ class State(rx.State):
         yield
 
         if new_chat:
-            title = await api.generate_title(question, default=default_title)
+            title = await api.generate_title(self, question, default=default_title)
             self.chats[chat.identifier].title = title
             yield
 
@@ -220,7 +228,7 @@ class State(rx.State):
         chat.history.append(assistant_msg)
 
         # Stream the results, yielding after every word.
-        async for answer_text in api.process_chat(chat):
+        async for answer_text in api.process_chat(self, chat):
             # Ensure answer_text is not None before concatenation
             if answer_text is not None:
                 assistant_msg.message += answer_text
@@ -233,7 +241,7 @@ class State(rx.State):
             yield
 
 
-        await api.save_chat(chat)
+        await api.save_chat(self, chat)
         self.processing = False
         yield
 

@@ -139,8 +139,10 @@ def sidebar() -> rx.Component:
         "/settings",
     ]
 
+    excluded_pages = ['/oauth2-redirect']
+
     # Get the decorated pages.
-    pages = get_decorated_pages()
+    pages = filter(lambda page: page['route'] not in excluded_pages, get_decorated_pages())
 
     # Include all pages even if they are not in the ordered_page_routes.
     ordered_pages = sorted(

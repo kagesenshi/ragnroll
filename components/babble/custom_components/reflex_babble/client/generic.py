@@ -9,15 +9,12 @@ import json
 
 class GenericClient(API):
 
-    def __init__(self, endpoint: str, model: str, stream_endpoint: Optional[str] = None, 
-                 auth: Optional[httpx.Auth] = None, timeout: float = 10.0):
+    def __init__(self, endpoint: str, model: str, stream_endpoint: Optional[str] = None):
         self.endpoint = endpoint
         self.stream_endpoint = stream_endpoint or endpoint
-        self.auth = auth
         self.model = model
-        self.timeout = timeout
 
-    async def generate_title(self, question: str, default: str = "New chat") -> str:
+    async def generate_title(self, state: State, question: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
                 f"Summarize the following question into a title with less than 10 words. "
@@ -29,7 +26,8 @@ class GenericClient(API):
             { "role" : "assistant", "content": ""}
         ]
 
-        async with httpx.AsyncClient(auth=self.auth, timeout=httpx.Timeout(self.timeout)) as client:
+        conn_opts = await self.httpx_connection_options(state)
+        async with httpx.AsyncClient(**conn_opts) as client:
             resp: httpx.Response = await client.post(self.endpoint,json={
                 'model': self.model,
                 'messages': messages
@@ -45,7 +43,7 @@ class GenericClient(API):
                 return message["content"]
         return default
     
-    async def process_chat(self, chat: Chat) -> AsyncGenerator[str, None]:
+    async def process_chat(self, state: State, chat: Chat) -> AsyncGenerator[str, None]:
         # Build the messages.
         messages = [
             {
@@ -61,7 +59,8 @@ class GenericClient(API):
         messages = messages[:-1]
     
         # Start a new session to answer the question.
-        async with httpx.AsyncClient(auth=self.auth) as client:
+        conn_opts = await self.httpx_connection_options(state)
+        async with httpx.AsyncClient(**conn_opts) as client:
             async with client.stream('POST', self.endpoint, json={
                 'model': self.model,
                 'messages': messages,

@@ -5,7 +5,7 @@ from ..state import State, Chat, API
 from typing import Any, AsyncGenerator
 
 class OpenAIClient(API):
-    async def generate_title(self, question: str, default: str = "New chat") -> str:
+    async def generate_title(self, state: State, question: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
                 f"Summarize the following question into a title with less than 10 words. "
@@ -29,7 +29,7 @@ class OpenAIClient(API):
             return default
         return default 
 
-    async def process_chat(self, chat: Chat):
+    async def process_chat(self, state: State, chat: Chat):
         # Build the messages.
         messages = [
             {

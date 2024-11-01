@@ -47,7 +47,7 @@ def dropdown_menu(chat_title: str, api_id: str, chat_id: str):
                                     size="3",
                                     variant="outline",
                                     on_click=lambda: State.delete_chat(
-                                        api_id, chat_id
+                                        chat_id
                                     ).debounce(500),
                                 )
                             ),
@@ -76,7 +76,7 @@ def menu_item(api_id: str, chat_id: str, title: str) -> rx.Component:
         rx.text(
             title, weight="regular",
             width="100%",
-            on_click=lambda: State.set_chat(api_id, chat_id),
+            on_click=lambda: State.set_chat(chat_id),
         ),
         rx.spacer(),
         dropdown_menu(title, api_id, chat_id),
@@ -213,7 +213,7 @@ def action_bar(api_id: str) -> rx.Component:
                     ),
                     is_disabled=State.processing,
                 ),
-                on_submit=lambda form_data: State.process_question(api_id, form_data),
+                on_submit=lambda form_data: State.process_question(form_data),
                 reset_on_submit=True,
             ),
             rx.text(
@@ -224,7 +224,7 @@ def action_bar(api_id: str) -> rx.Component:
             ),
             align_items="center",
         ),
-        on_mount=lambda : State.load_chats(api_id),
+        on_mount=lambda : State.set_api_id(api_id),
         position="sticky",
         bottom="0",
         left="0",

@@ -5,6 +5,8 @@ from __future__ import annotations
 from .. import styles
 from ..components.sidebar import sidebar
 from ..components.navbar import navbar
+from ..components.authn import login_page
+from ..components.authn import State as AuthState
 from typing import Callable
 
 import reflex as rx
@@ -123,12 +125,16 @@ def template(
         )
         def theme_wrap():
             return rx.theme(
-                templated_page(),
+                rx.cond(AuthState.logged_in,
+                    templated_page(),
+                    login_page(),
+                ),
                 has_background=True,
                 accent_color=ThemeState.accent_color,
                 gray_color=ThemeState.gray_color,
                 radius=ThemeState.radius,
                 scaling=ThemeState.scaling,
+                on_mount=AuthState.refresh_token
             )
 
         return theme_wrap

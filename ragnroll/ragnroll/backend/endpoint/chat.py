@@ -7,6 +7,7 @@ from ..util import format_text
 from ..model import ChatRequest, ChatResponse, ChatHistory, ChatHistoryMessage, Result
 from ..db import Session
 from ..config import settings
+from ..authn import Identity
 import ollama
 import fastapi
 import neo4j
@@ -40,7 +41,7 @@ async def chat(chatrequest: ChatRequest) -> ChatResponse:
     return await ollama_chat(chatrequest)
 
 @app.get('/chat/recent')
-async def recent_chats(request: fastapi.Request, session: Session) -> Result[list[ChatHistory]]:
+async def recent_chats(request: fastapi.Request, session: Session, identity: Identity) -> Result[list[ChatHistory]]:
     async def transaction(txn: neo4j.AsyncTransaction):
         query = """
         MATCH (s:_ChatSession)-[:CONTAINS]->(m:_ChatMessage)
