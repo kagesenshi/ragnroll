@@ -1,8 +1,10 @@
 import reflex as rx
+import reflex.vars as rxvars
 import reflex_chakra as rxchakra
 from .components import loading_icon, resizable_textarea, three_dots_loading_icon
 from .state import ChatStateMixin, ChatMessage, Chat
 from . import styles
+from typing import Callable
 import hashlib
 
 message_style = dict(
@@ -13,7 +15,8 @@ message_style = dict(
 )
 
 
-def dropdown_menu(chat_title: str, state_cls: type[ChatStateMixin], chat_id: str):
+def dropdown_menu(*, chat_id: str, chat_title: str, 
+                     on_chat_delete: Callable[[str], None]):
     return rx.menu.root(
         rx.menu.trigger(rx.icon("ellipsis-vertical")),
         rx.menu.content(
@@ -46,7 +49,7 @@ def dropdown_menu(chat_title: str, state_cls: type[ChatStateMixin], chat_id: str
                                     "Yes",
                                     size="3",
                                     variant="outline",
-                                    on_click=lambda: state_cls.delete_chat_handler(
+                                    on_click=lambda: on_chat_delete(
                                         chat_id
                                     ).debounce(500),
                                 )
@@ -60,7 +63,9 @@ def dropdown_menu(chat_title: str, state_cls: type[ChatStateMixin], chat_id: str
     )
 
 
-def menu_item(state_cls: type[ChatStateMixin], chat_id: str, title: str) -> rx.Component:
+def menu_item(*, current_chat: str, chat_id: str, chat_title: str, 
+              on_chat_change: Callable[[str], None],
+              on_chat_delete: Callable[[str], None]) -> rx.Component:
     """Menu item.
 
     Args:
@@ -71,15 +76,16 @@ def menu_item(state_cls: type[ChatStateMixin], chat_id: str, title: str) -> rx.C
         rx.Component: The menu item component.
     """
     # Whether the item is active.
-    active = state_cls.current_chat == chat_id
+    active = current_chat == chat_id
     return rx.hstack(
         rx.text(
-            title, weight="regular",
+            chat_title, weight="regular",
             width="100%",
-            on_click=lambda: state_cls.set_chat_handler(chat_id),
+            on_click=lambda: on_chat_change(chat_id),
         ),
         rx.spacer(),
-        dropdown_menu(title, state_cls, chat_id),
+        dropdown_menu(chat_title=chat_title, chat_id=chat_id, 
+                      on_chat_delete=on_chat_delete),
         style={
             "_hover": {
                 "background_color": rx.cond(
@@ -97,8 +103,13 @@ def menu_item(state_cls: type[ChatStateMixin], chat_id: str, title: str) -> rx.C
             "opacity": rx.cond(
                 active,
                 "1",
-                "0.95",
+                "0.80",
             ),
+            "font-weight": rx.cond(
+                active,
+                "bold",
+                "normal"
+            )
         },
         align="center",
         width="100%",
@@ -152,20 +163,20 @@ def message(message: ChatMessage) -> rx.Component:
     )
 
 
-def chat(state_cls: type[ChatStateMixin]) -> rx.Component:
+def chat(*, current_chat:str, current_chat_rendered: list[ChatMessage], processing_state: bool, ) -> rx.Component:
     """List all the messages in a single conversation."""
     return rx.vstack(
         rx.cond(
-            state_cls.current_chat == None,
+            current_chat == None,
             rx.box(
                 rx.heading("What can I help with?", align="center"),
                 width="100%",
                 margin_top="200px",
             ),
             rx.box(
-                rx.foreach(state_cls.rendered_current_chat, message),
+                rx.foreach(current_chat_rendered, message),
                 rx.cond(
-                    state_cls.processing,
+                    processing_state,
                     rx.box(
                         three_dots_loading_icon(height="0.5em"),
                         text_align="left",
@@ -186,7 +197,12 @@ def chat(state_cls: type[ChatStateMixin]) -> rx.Component:
     )
 
 
-def action_bar(state_cls: type[ChatStateMixin]) -> rx.Component:
+def action_bar(
+    *,
+    processing_state: bool,
+    on_message_submit: Callable[[dict[str, str]], None],
+) -> rx.Component:
+
     return rx.center(
         rx.vstack(
             rxchakra.form(
@@ -198,11 +214,10 @@ def action_bar(state_cls: type[ChatStateMixin]) -> rx.Component:
                             width=["10em", "15em", "20em", "30em", "45em", "50em"],
                             auto_height=True,
                             padding="5pt",
-                            on_key_down=state_cls.on_key_down,
                         ),
                         rx.button(
                             rx.cond(
-                                state_cls.processing,
+                                processing_state,
                                 loading_icon(height="1em"),
                                 rx.text("Send"),
                             ),
@@ -211,9 +226,9 @@ def action_bar(state_cls: type[ChatStateMixin]) -> rx.Component:
                         ),
                         align_items="center",
                     ),
-                    is_disabled=state_cls.processing,
+                    is_disabled=processing_state,
                 ),
-                on_submit=lambda form_data: state_cls.process_question_handler(form_data),
+                on_submit=lambda form_data: on_message_submit(form_data),
                 reset_on_submit=True,
             ),
             rx.text(
@@ -237,10 +252,21 @@ def action_bar(state_cls: type[ChatStateMixin]) -> rx.Component:
     )
 
 
-def history(state_cls: type[ChatStateMixin], **props) -> rx.Component:
+def history(*, chats: list[Chat],  
+            current_chat: str, 
+            on_chat_change: Callable[[str], None],
+            on_chat_delete: Callable[[str], None],
+            **props) -> rx.Component:
     return rx.vstack(
         rx.foreach(
-            state_cls.sorted_chats, lambda entry: menu_item(state_cls, entry.identifier, entry.title)
+            chats,
+            lambda entry: menu_item(
+                current_chat=current_chat,
+                chat_id=entry.identifier,
+                chat_title=entry.title,
+                on_chat_change=on_chat_change,
+                on_chat_delete=on_chat_delete,
+            ),
         ),
         spacing="0",
         **props,

@@ -20,7 +20,6 @@ async def ollama_chat_stream(chatrequest: ChatRequest):
         messages=req['messages'],
         stream=True
     )
-
     async for item in session:
         data = ChatResponse(model=item['model'], message=item['message']).model_dump_json()
         yield f'{data}\n'
@@ -33,7 +32,7 @@ async def ollama_chat(chatrequest: ChatRequest):
     )
     return ChatResponse(model=result['model'], message=result['message'])
 
-@app.post('/chat/completion')
+@app.post('/chat/completions')
 async def chat(chatrequest: ChatRequest) -> ChatResponse:
     if chatrequest.stream:
         return StreamingResponse(ollama_chat_stream(chatrequest))
@@ -41,15 +40,20 @@ async def chat(chatrequest: ChatRequest) -> ChatResponse:
     return await ollama_chat(chatrequest)
 
 @app.get('/chat/recent')
-async def recent_chats(request: fastapi.Request, session: Session, identity: Identity) -> Result[list[ChatHistory]]:
+async def recent_chats(request: fastapi.Request, session: Session, identity: Identity, limit: int = 20) -> Result[list[ChatHistory]]:
+    if limit > 50:
+        limit = 50
+
     async def transaction(txn: neo4j.AsyncTransaction):
         query = """
         MATCH (s:_ChatSession)-[:CONTAINS]->(m:_ChatMessage)
+        WITH s, m ORDER BY m.timestamp ASC
         RETURN s as session, collect(m) as messages 
         ORDER BY session.timestamp DESC
-        LIMIT 20
+        LIMIT $limit
         """
-        chats = await txn.run(query)
+
+        chats = await txn.run(query, limit=limit)
         return (await chats.data(), await chats.consume())
     (query_result, query_summary) = await session.execute_read(transaction)
     result = []
@@ -78,8 +82,12 @@ async def recent_chats(request: fastapi.Request, session: Session, identity: Ide
 
 @app.put("/chat/session/{identifier}")
 async def put_chat_history(
-    request: fastapi.Request, chat: ChatHistory, session: Session
+    request: fastapi.Request, chat: ChatHistory, session: Session,
+    identifier: str,
+    identity: Identity
 ):
+    
+    chat.identifier = identifier
     async def transaction(txn: neo4j.AsyncTransaction):
         await txn.run(
             "MERGE (n:_ChatSession {identifier: $identifier})",
@@ -132,3 +140,26 @@ async def put_chat_history(
             prev = msg
 
     await session.execute_write(transaction)
+
+    return {}
+
+@app.delete("/chat/session/{identifier}")
+async def delete_chat_history(
+    request: fastapi.Request, identifier: str, session: Session,
+    identity: Identity
+):
+    
+    async def transaction(txn: neo4j.AsyncTransaction):
+        query = """
+        MATCH (n:_ChatSession {identifier: $identifier})
+        OPTIONAL MATCH (n)-[:CONTAINS]-(msg:_ChatMessage)
+        detach delete n,msg
+        """
+        await txn.run(
+            query,
+            identifier=identifier,
+        )
+    
+    await session.execute_write(transaction)
+
+    return {}

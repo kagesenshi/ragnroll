@@ -12,7 +12,7 @@ def load():
     from .backend import router 
     from .backend.endpoint import search 
     from .backend.endpoint.resource import expertise 
-    from .backend.endpoint.chat import chat
+    from .backend.endpoint import chat as chat
     from .backend.config import settings
     for r in router.reflex_app.api.routes:
         if r.path in ['/docs', '/openapi.json']:

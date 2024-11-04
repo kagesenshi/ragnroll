@@ -56,7 +56,26 @@ class ResizableTextArea(rx.Component):
     on_input: rx.EventHandler[input_event]
     on_focus: rx.EventHandler[input_event]
     on_blur: rx.EventHandler[input_event]
-    on_key_down: rx.EventHandler[key_event]
+    #on_key_down: rx.EventHandler[key_event]
     on_key_up: rx.EventHandler[key_event]
+
+    special_props: list[rx.Var] = [rx.Var(_js_expr="onKeyDown={textAreaEnterHandler}")]
+
+    def add_custom_code(self) -> List[str]:
+        return ["""
+        const textAreaEnterHandler = (event) => {
+            // Check if 'Enter' key is pressed and 'Shift' is not held
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevents adding a new line
+                const nearestForm = event.target.closest('form');
+                if (nearestForm) {
+                    const submitButton = nearestForm.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.click(); // Triggers a click on the submit button
+                    }
+                }   
+            }
+        };
+        """]
 
 resizable_textarea = ResizableTextArea.create

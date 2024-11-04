@@ -134,7 +134,7 @@ def template(
                 gray_color=ThemeState.gray_color,
                 radius=ThemeState.radius,
                 scaling=ThemeState.scaling,
-                on_mount=AuthState.refresh_token
+                #on_mount=AuthState.refresh_token
             )
 
         return theme_wrap

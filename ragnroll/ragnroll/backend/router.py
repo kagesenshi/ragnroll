@@ -17,7 +17,7 @@ import fastapi.exceptions
 from fastapi.responses import JSONResponse
 from typing import Annotated
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-
+from . import exc
 
 from ..ragnroll import app as reflex_app
 
@@ -27,10 +27,6 @@ router = fastapi.APIRouter(route_class=YamlRoute, responses={422: {
 }})
 
 reflex_app.api.title = "RAG'n'Roll"
-
-@router.post("/chat/completions", response_model_exclude_none=True, response_model_exclude_unset=True)
-async def chat():
-    pass
 
 @reflex_app.api.exception_handler(yaml.parser.ParserError)
 async def parser_error(request: fastapi.Request, exc: yaml.parser.ParserError, response: fastapi.Response) -> model.ErrorResult:
@@ -46,6 +42,14 @@ async def http_exc(request: fastapi.Request, exc: fastapi.HTTPException, respons
     return model.ErrorResult(
         detail=exc.detail,
         errors=[model.Error(detail=exc.detail)]
+    )
+
+@reflex_app.api.exception_handler(exc.Unauthorized)
+async def unauthorized_exc(request: fastapi.Request, exc: exc.Unauthorized, response: fastapi.Response) -> model.ErrorResult:
+    response.status_code = 401
+    return model.ErrorResult(
+        detail=str(exc),
+        errors=[model.Error(detail=str(exc))]
     )
 
 #@reflex_app.api.exception_handler(pydantic.ValidationError)
