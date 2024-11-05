@@ -4,7 +4,7 @@ from ..router import router as app
 from ..langchain import embeddings_model
 from ..rag import answer_question, default_search
 from ..util import format_text
-from ..model import ChatRequest, ChatResponse, ChatHistory, ChatHistoryMessage, Result
+from ..model import ChatRequest, ChatResponse, ChatHistory, ChatHistoryMessage, Result, ChatAgent
 from ..db import Session
 from ..config import settings
 from ..authn import Identity
@@ -13,10 +13,22 @@ import fastapi
 import neo4j
 from fastapi.responses import StreamingResponse
 
+# TBD: Manage agents as pipelines JSON
+AGENTS = [
+    ChatAgent(title='Mistral', name='mistral', model='mistral-nemo:12b-instruct-2407-q4_K_M'),
+]
+
+def get_model(agent_name: str):
+    for a in AGENTS:
+        if a.name == agent_name:
+            return a.model
+    return 'mistral-nemo:12b-instruct-2407-q4_K_M'
+
 async def ollama_chat_stream(chatrequest: ChatRequest):
+    
     req = chatrequest.model_dump()
     session = await ollama.AsyncClient().chat(
-        model=chatrequest.model,
+        model=get_model(chatrequest.model),
         messages=req['messages'],
         stream=True
     )
@@ -27,19 +39,19 @@ async def ollama_chat_stream(chatrequest: ChatRequest):
 async def ollama_chat(chatrequest: ChatRequest):
     req = chatrequest.model_dump()
     result = await ollama.AsyncClient().chat(
-        model=chatrequest.model,
+        model=get_model(chatrequest.model),
         messages=req['messages'],
     )
     return ChatResponse(model=result['model'], message=result['message'])
 
-@app.post('/chat/completions')
+@app.post('/chat/v1/completions')
 async def chat(chatrequest: ChatRequest) -> ChatResponse:
     if chatrequest.stream:
         return StreamingResponse(ollama_chat_stream(chatrequest))
 
     return await ollama_chat(chatrequest)
 
-@app.get('/chat/recent')
+@app.get('/chat/v1/recent')
 async def recent_chats(request: fastapi.Request, session: Session, identity: Identity, limit: int = 20) -> Result[list[ChatHistory]]:
     if limit > 50:
         limit = 50
@@ -77,10 +89,47 @@ async def recent_chats(request: fastapi.Request, session: Session, identity: Ide
     return {
         'data': result
     }
+
+
+@app.get('/chat/v1/session/{identifier}')
+async def recent_chats(request: fastapi.Request, session: Session, identity: Identity, identifier: str, limit: int = 20) -> Result[ChatHistory]:
+    if limit > 50:
+        limit = 50
+
+    async def transaction(txn: neo4j.AsyncTransaction):
+        query = """
+        MATCH (s:_ChatSession {identifier: $identifier})-[:CONTAINS]->(m:_ChatMessage)
+        WITH s, m ORDER BY m.timestamp ASC
+        RETURN s as session, collect(m) as messages 
+        ORDER BY session.timestamp DESC
+        LIMIT $limit
+        """
+
+        chats = await txn.run(query, limit=limit, identifier=identifier)
+        return (await chats.single(), await chats.consume())
+    (c, query_summary) = await session.execute_read(transaction)
+    session = c['session']
+    messages = c['messages']
+    chat = ChatHistory(
+        identifier=session['identifier'],
+        title=session['title'],
+        timestamp=session['timestamp'].isoformat(),
+        history=[
+            ChatHistoryMessage(
+                identifier=m['identifier'],
+                timestamp=m['timestamp'].isoformat(),
+                role=m['role'],
+                message=m['message']
+            ) for m in messages
+        ]
+    )
+    return {
+        'data': chat
+    }
     
 
 
-@app.put("/chat/session/{identifier}")
+@app.put("/chat/v1/session/{identifier}")
 async def put_chat_history(
     request: fastapi.Request, chat: ChatHistory, session: Session,
     identifier: str,
@@ -111,12 +160,13 @@ async def put_chat_history(
             await txn.run(
                 """
                     MATCH (n:_ChatMessage {identifier: $identifier})
-                    SET n.role=$role, n.message=$message, n.timestamp=datetime($timestamp)
+                    SET n.role=$role, n.message=$message, n.timestamp=datetime($timestamp), n.model=$model
                 """,
                 identifier=msg.identifier,
                 role=msg.role,
                 timestamp=msg.timestamp,
                 message=msg.message,
+                model=msg.model
             )
             await txn.run(
                 """
@@ -143,7 +193,7 @@ async def put_chat_history(
 
     return {}
 
-@app.delete("/chat/session/{identifier}")
+@app.delete("/chat/v1/session/{identifier}")
 async def delete_chat_history(
     request: fastapi.Request, identifier: str, session: Session,
     identity: Identity
@@ -163,3 +213,11 @@ async def delete_chat_history(
     await session.execute_write(transaction)
 
     return {}
+
+
+
+@app.get('/model/v1/models')
+async def get_agents(request: fastapi.Request, identity: Identity) -> Result[list[ChatAgent]]:
+    return {
+        'data': AGENTS
+    }

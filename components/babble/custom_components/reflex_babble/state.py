@@ -12,6 +12,13 @@ from datetime import datetime
 import traceback
 import pytz
 import time
+import asyncio
+
+SCROLL_BOTTOM = rx.call_script("""
+    window.scrollTo({
+        top: (window.innerHeight > (document.getElementsByClassName('conversation')[0].scrollHeight + 300)) ? 0 : document.body.scrollHeight ,
+        behavior: 'smooth'});
+    """)
 
 class ChatMessage(rx.Base):
 
@@ -19,6 +26,7 @@ class ChatMessage(rx.Base):
     timestamp: datetime
     role: Literal['assistant', 'user']
     message: str
+    model: Optional[str] = None
 
 class Chat(rx.Base):
 
@@ -27,6 +35,10 @@ class Chat(rx.Base):
     title: str
     history: list[ChatMessage]    
 
+class Model(rx.Base):
+
+    name: str
+    title: str
 
 def render_markdown(text: str) -> str:
     return markdown.markdown(text, extensions=[CodeHiliteExtension(linenums=False), FencedCodeExtension()])
@@ -39,6 +51,12 @@ class ChatStateMixin(rx.State, mixin=True):
 
     # The current chat name.
     current_chat: Optional[str] = None
+
+    # current selected model
+    current_model: Optional[str] = None
+
+    # available models
+    available_models: list[Model] = []
 
     # The current question.
     question: str
@@ -78,10 +96,11 @@ class ChatStateMixin(rx.State, mixin=True):
                         timestamp=c.timestamp,
                         role=c.role,
                         message=render_markdown(c.message),
+                        model=c.model,
                     )
                 )
         return res
-
+    
     async def on_mount(self):
         now = time.time()
         if self.chats and (now - self.last_refresh < 300):
@@ -91,7 +110,28 @@ class ChatStateMixin(rx.State, mixin=True):
         if len(chats) == 0:
             self.current_chat = None
             yield
+
         self.chats = dict([(c.identifier, c) for c in chats])
+
+        models = await self.load_models()
+        self.available_models = models
+        if not self.current_model and models:
+            self.current_model = models[0].name
+    
+        if len(chats) == 0 and len(models) == 0:
+            yield self.__class__.on_mount_refresh
+
+    @rx.background
+    async def on_mount_refresh(self):
+        await asyncio.sleep(1)
+        async with self:
+            res = []
+            async for i in self.on_mount():
+                res.append(i)
+                yield
+
+        for r in res:
+            yield r
 
     async def on_chat_new(self):
         self.current_chat = None
@@ -104,6 +144,7 @@ class ChatStateMixin(rx.State, mixin=True):
         """
         await self.set_chat(chat_id)
         self.current_chat = chat_id
+        yield SCROLL_BOTTOM
 
     async def on_chat_delete(self, chat_id: str):
         """Delete the current chat."""
@@ -120,9 +161,17 @@ class ChatStateMixin(rx.State, mixin=True):
         self.last_refresh = 0
         yield self.__class__.on_mount
 
+    async def on_model_select(self, model_name: str):
+        self.current_model = model_name
+
     async def on_message_submit(self, form_data: dict[str, str]):
         # Get the question from the form
         question = form_data["question"]
+        model = form_data["model"]
+
+        if not model:
+            yield rx.toast.error("Please select a model")
+            return
 
         # Check if the question is empty
         if question == "":
@@ -151,7 +200,8 @@ class ChatStateMixin(rx.State, mixin=True):
             identifier=str(uuid7()),
             timestamp=datetime.now(pytz.UTC),
             role='user',
-            message=question
+            message=question,
+            model=None,
         )
         chat.history.append(user_msg)
         # Clear the input and start the processing.
@@ -159,7 +209,7 @@ class ChatStateMixin(rx.State, mixin=True):
         yield
 
         if new_chat:
-            title = await self.generate_title(question, default=self.default_title)
+            title = await self.generate_title(question, model=model, default=self.default_title)
             self.chats[self.current_chat].title = title
             self.chats = self.chats
             yield
@@ -168,19 +218,20 @@ class ChatStateMixin(rx.State, mixin=True):
                 identifier=str(uuid7()),
                 timestamp=datetime.now(pytz.UTC),
                 role='assistant',
-                message=""
+                message="",
+                model=model
             )
         self.chats[self.current_chat].history.append(assistant_msg)
         msg_idx = self.chats[self.current_chat].history.index(assistant_msg)
 
-        yield self.__class__.bg_process_chat(msg_idx)
+        yield self.__class__.bg_process_chat(msg_idx, model)
     
     @rx.background
-    async def bg_process_chat(self, msg_idx: int):
+    async def bg_process_chat(self, msg_idx: int, model: str):
         # Stream the results, yielding after every word.
         async def generator():
             buffer: list[str] = []
-            async for answer_text in self.process_chat(self.chats[self.current_chat]):
+            async for answer_text in self.process_chat(self.chats[self.current_chat], model=model):
                 if answer_text is not None:
                     buffer.append(answer_text)
                 else:
@@ -197,7 +248,7 @@ class ChatStateMixin(rx.State, mixin=True):
                     self.chats[self.current_chat].history[msg_idx].message += word
                     yield
                 self.chats = self.chats
-                yield
+                yield SCROLL_BOTTOM
 
         async with self:
             await self.save_chat(self.chats[self.current_chat])
@@ -205,7 +256,7 @@ class ChatStateMixin(rx.State, mixin=True):
 
     @classmethod
     def get_parent_state(cls):
-        # FIXME: Workaround 
+        # FIXME: workaround 
         parent_states = [
             base
             for base in cls.__bases__
@@ -216,11 +267,11 @@ class ChatStateMixin(rx.State, mixin=True):
         return super().get_parent_state()
 
     @abc.abstractmethod
-    async def generate_title(self, question: str, default: str = 'New chat') -> str:
+    async def generate_title(self, question: str, model: str, default: str = 'New chat') -> str:
         raise NotImplemented
 
     @abc.abstractmethod
-    async def process_chat(self, chat: 'Chat') -> AsyncGenerator[str, None]:
+    async def process_chat(self, chat: 'Chat', model: str) -> AsyncGenerator[str, None]:
         raise NotImplemented
 
     @abc.abstractmethod 
@@ -236,4 +287,8 @@ class ChatStateMixin(rx.State, mixin=True):
 
     @abc.abstractmethod
     async def load_chats(self) -> list[Chat]:
+        pass
+
+    @abc.abstractmethod
+    async def load_models(self) -> list[Model]:
         pass

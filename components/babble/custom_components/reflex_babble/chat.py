@@ -2,9 +2,9 @@ import reflex as rx
 import reflex.vars as rxvars
 import reflex_chakra as rxchakra
 from .components import loading_icon, resizable_textarea, three_dots_loading_icon
-from .state import ChatStateMixin, ChatMessage, Chat
+from .state import ChatStateMixin, ChatMessage, Chat, Model
 from . import styles
-from typing import Callable
+from typing import Callable, Optional
 import hashlib
 
 message_style = dict(
@@ -184,8 +184,10 @@ def chat(*, current_chat:str, current_chat_rendered: list[ChatMessage], processi
                     ),
                 ),
                 width="100%",
+                class_name="conversation",
             ),
         ),
+        class_name="chatbox",
         py="8",
         flex="1",
         width="100%",
@@ -199,8 +201,12 @@ def chat(*, current_chat:str, current_chat_rendered: list[ChatMessage], processi
 
 def action_bar(
     *,
+    models: list[Model],
     processing_state: bool,
+    current_model: str,
+    on_model_select: Callable[[str], None],
     on_message_submit: Callable[[dict[str, str]], None],
+    disclaimer: Optional[str] = None
 ) -> rx.Component:
 
     return rx.center(
@@ -208,6 +214,20 @@ def action_bar(
             rxchakra.form(
                 rxchakra.form_control(
                     rx.hstack(
+                        rx.select.root(
+                            rx.select.trigger(),
+                            rx.select.content(
+                                rx.select.group(
+                                    rx.select.label("Model"),
+                                    rx.foreach(models, lambda m:
+                                        rx.select.item(m.title, value=m.name)
+                                    )
+                                )
+                            ),
+                            default_value=current_model,
+                            on_change=on_model_select,
+                            name="model",
+                        ),
                         resizable_textarea(
                             placeholder="Type something...",
                             id="question",
@@ -232,7 +252,11 @@ def action_bar(
                 reset_on_submit=True,
             ),
             rx.text(
-                "ReflexGPT may return factually incorrect or misleading responses. Use discretion.",
+                rx.cond(
+                    disclaimer,
+                    disclaimer,
+                    "ReflexGPT may return factually incorrect or misleading responses. Use discretion."
+                ),
                 text_align="center",
                 font_size=".75em",
                 color=rx.color("mauve", 10),

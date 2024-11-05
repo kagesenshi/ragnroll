@@ -1,4 +1,6 @@
 import requests
+
+from reflex_babble.state import Model
 from .state import ChatStateMixin, Chat, ChatMessage
 from typing import Any, AsyncGenerator, Optional
 from .settings import settings
@@ -11,7 +13,8 @@ import abc
 
 class GenericClient(ChatStateMixin, mixin=True):
 
-    base_endpoint: str = f'{config.api_url}/chat'
+    base_endpoint: str = f'{config.api_url}/chat/v1'
+    model_endpoint: str = f'{config.api_url}/model/v1/models'
 
     @rx.var
     def completion_endpoint(self) -> str:
@@ -24,13 +27,15 @@ class GenericClient(ChatStateMixin, mixin=True):
     @rx.var
     def recent_endpoint(self) -> str:
         return f'{self.base_endpoint}/recent'
-
-    model: str = settings.OLLAMA_MODEL
-
+    
+    @rx.var
+    def agent_endpoint(self) -> str:
+        return f'{self.base_endpoint}/agents'
+    
     async def httpx_connection_options(self) -> dict[str, Any]:
         return {}
     
-    async def generate_title(self, question: str, default: str = "New chat") -> str:
+    async def generate_title(self, question: str, model: str, default: str = "New chat") -> str:
         messages = [
             { "role": "user", "content": (
                 f"Summarize the following question into a title with less than 10 words. "
@@ -45,7 +50,7 @@ class GenericClient(ChatStateMixin, mixin=True):
         conn_opts = await self.httpx_connection_options()
         async with httpx.AsyncClient(**conn_opts) as client:
             resp: httpx.Response = await client.post(self.completion_endpoint,json={
-                'model': self.model,
+                'model': model,
                 'messages': messages
             })
             result: dict = resp.json()
@@ -59,7 +64,7 @@ class GenericClient(ChatStateMixin, mixin=True):
                 return message["content"]
         return default
     
-    async def process_chat(self, chat: Chat) -> AsyncGenerator[str, None]:
+    async def process_chat(self, chat: Chat, model: str) -> AsyncGenerator[str, None]:
         # Build the messages.
         messages = [
             {
@@ -75,10 +80,11 @@ class GenericClient(ChatStateMixin, mixin=True):
         messages = messages[:-1]
     
         # Start a new session to answer the question.
-        conn_opts = await self.httpx_connection_options()
+        async with self:
+            conn_opts = await self.httpx_connection_options()
         async with httpx.AsyncClient(**conn_opts) as client:
             async with client.stream('POST', self.completion_endpoint, json={
-                'model': self.model,
+                'model': model,
                 'messages': messages,
                 'stream': True
             }) as resp:
@@ -110,7 +116,8 @@ class GenericClient(ChatStateMixin, mixin=True):
                         'identifier': r.identifier,
                         'timestamp': r.timestamp.isoformat(),
                         'role': r.role,
-                        'message': r.message
+                        'message': r.message,
+                        'model': r.model
                     } for r in chat.history]
                 })
         return 
@@ -119,6 +126,9 @@ class GenericClient(ChatStateMixin, mixin=True):
         conn_opts = await self.httpx_connection_options()
         async with httpx.AsyncClient(**conn_opts) as client:
             resp = await client.get(f'{self.recent_endpoint}')
+            if resp.status_code != 200:
+                print(resp.status_code)
+                return []
             result = resp.json()
         return [
             Chat(
@@ -129,7 +139,8 @@ class GenericClient(ChatStateMixin, mixin=True):
                     ChatMessage(identifier=m['identifier'],
                                 timestamp=m['timestamp'],
                                 role=m['role'],
-                                message=m['message']) 
+                                message=m['message'],
+                                model=m['model']) 
                     for m in r['history']                   
                 ]
             ) for r in result['data']
@@ -142,3 +153,16 @@ class GenericClient(ChatStateMixin, mixin=True):
             if not resp.status_code == 200:
                 raise AssertionError(f"Failed to delete chat {identifier}. Error code: {resp.status_code}")
         return 
+    
+    
+    async def load_models(self) -> list[Model]:
+        conn_opts = await self.httpx_connection_options()
+        async with httpx.AsyncClient(**conn_opts) as client:
+            resp = await client.get(f'{self.model_endpoint}')
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+        result = [
+            Model(title=r['title'], name=r['name']) for r in data['data']
+        ]
+        return result

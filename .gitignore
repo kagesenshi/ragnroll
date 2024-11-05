@@ -11,6 +11,7 @@ lib/
 .devcontainer/neo4j-data/
 .devcontainer/neo4j-logs/
 .devcontainer/neo4j-import/
+.devcontainer/redis-data/
 **/.venv
 
 *.db

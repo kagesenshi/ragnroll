@@ -9,7 +9,7 @@ import jwt
 import traceback
 import sys
 
-class State(rx.State):
+class AuthState(rx.State):
 
     access_token: str = rx.Cookie(name='access_token')
     id_token: str = rx.Cookie(name='id_token')
@@ -21,6 +21,8 @@ class State(rx.State):
     @rx.var
     def authorization_header(self):
         return f'{self.token_type or "Bearer"} {self.id_token}'
+
+class State(rx.State):
 
     async def on_success(self, result: dict):
         async with httpx.AsyncClient() as client:
@@ -37,10 +39,11 @@ class State(rx.State):
                 message = "Unable to get auth token from authorization code"
                 yield rx.toast.error(message)
                 raise Unauthorized(message)
-            self.access_token = tokens['access_token']
-            self.id_token = tokens['id_token']
-            self.token_type = tokens['token_type']
-            self.refresh_token = tokens['refresh_token']
+            auth: AuthState = await self.get_state(AuthState)
+            auth.access_token = tokens['access_token']
+            auth.id_token = tokens['id_token']
+            auth.token_type = tokens['token_type']
+            auth.refresh_token = tokens['refresh_token']
         yield rx.toast.success("Login successful")
         yield self.__class__.refresh
 
@@ -48,13 +51,14 @@ class State(rx.State):
         yield rx.toast.error(error)
 
     async def refresh(self):
-        if not self.refresh_token:
-            self.logged_in = False
+        auth: AuthState = await self.get_state(AuthState)
+        if not auth.refresh_token:
+            auth.logged_in = False
             print('no refresh token')
             return 
         try:
-            decoded = decode_token(self.id_token)
-            self.logged_in = True
+            decoded = decode_token(auth.id_token)
+            auth.logged_in = True
             print('logged in')
             return 
         except jwt.ExpiredSignatureError:
@@ -67,7 +71,7 @@ class State(rx.State):
         async with httpx.AsyncClient() as client:
             resp = await client.post(oidc_configuration.token_endpoint, data={
                 'grant_type': 'refresh_token',
-                'refresh_token': self.refresh_token,
+                'refresh_token': auth.refresh_token,
                 'client_id': settings.OIDC_CLIENT_ID,
                 'client_secret': settings.OIDC_CLIENT_SECRET,
             })
@@ -77,24 +81,24 @@ class State(rx.State):
                 yield rx.toast.error(message)
                 raise Unauthorized(message)
             print('token refreshed')
-            self.access_token = tokens['access_token']
-            self.id_token = tokens['id_token']
-            self.token_type = tokens['token_type']
+            auth.access_token = tokens['access_token']
+            auth.id_token = tokens['id_token']
+            auth.token_type = tokens['token_type']
             try:
-                decoded = decode_token(self.id_token)
+                decoded = decode_token(auth.id_token)
             except jwt.PyJWTError as e:
                 self.logged_in = False
                 yield
                 raise e
 
-        self.logged_in = True
+        auth.logged_in = True
 
     async def on_mount(self):
         yield self.__class__.refresh
 
 @rx.page('/oauth2-redirect')
 def oauth2_redirect() -> rx.Component:
-	return rx.script("window.close('','_parent','')")
+    return rx.script("window.close('','_parent','')")
 
 
 def login_button() -> rx.Component:

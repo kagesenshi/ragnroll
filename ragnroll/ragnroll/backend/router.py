@@ -29,38 +29,28 @@ router = fastapi.APIRouter(route_class=YamlRoute, responses={422: {
 reflex_app.api.title = "RAG'n'Roll"
 
 @reflex_app.api.exception_handler(yaml.parser.ParserError)
-async def parser_error(request: fastapi.Request, exc: yaml.parser.ParserError, response: fastapi.Response) -> model.ErrorResult:
-    response.status_code = 422
-    return model.ErrorResult(
+async def parser_error(request: fastapi.Request, exc: yaml.parser.ParserError) -> model.ErrorResult:
+    return JSONResponse(content=model.ErrorResult(
         detail='Unable to parse YAML',
         errors=[model.Error(detail='Invalid data type')]
-    )
+    ).model_dump(), status_code=422)
 
 @reflex_app.api.exception_handler(fastapi.HTTPException)
-async def http_exc(request: fastapi.Request, exc: fastapi.HTTPException, response: fastapi.Response) -> model.ErrorResult:
-    response.status_code = exc.status_code
-    return model.ErrorResult(
+async def http_exc(request: fastapi.Request, exc: fastapi.HTTPException) -> model.ErrorResult:
+    return JSONResponse(content=model.ErrorResult(
         detail=exc.detail,
         errors=[model.Error(detail=exc.detail)]
-    )
+    ).model_dump(), status_code=exc.status_code)
 
 @reflex_app.api.exception_handler(exc.Unauthorized)
-async def unauthorized_exc(request: fastapi.Request, exc: exc.Unauthorized, response: fastapi.Response) -> model.ErrorResult:
-    response.status_code = 401
-    return model.ErrorResult(
+async def unauthorized_exc(request: fastapi.Request, exc: exc.Unauthorized):
+    return JSONResponse(content=model.ErrorResult(
         detail=str(exc),
         errors=[model.Error(detail=str(exc))]
-    )
-
-#@reflex_app.api.exception_handler(pydantic.ValidationError)
-#async def pydantic_validation_exc(request: fastapi.Request, exc: pydantic.ValidationError):
-#    return JSONResponse(content=model.ErrorResult(
-#        detail='Data validation error',
-#        errors=[model.Error(detail=e['msg'], meta={'raw': e}) for e in exc.errors()]
-#    ).model_dump(), status_code=422)
+    ).model_dump(), status_code=401)
 
 @reflex_app.api.exception_handler(fastapi.exceptions.RequestValidationError)
-async def fastapi_validation_exc(request: fastapi.Request, exc: fastapi.exceptions.RequestValidationError) -> model.ErrorResult:
+async def fastapi_validation_exc(request: fastapi.Request, exc: fastapi.exceptions.RequestValidationError):
     return JSONResponse(content=model.ErrorResult(
         detail='Data validation error',
         errors=[model.Error(detail=e['msg'], meta={'raw': e}) for e in exc.errors()]

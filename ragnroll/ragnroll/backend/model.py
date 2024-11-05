@@ -142,7 +142,8 @@ class ChatHistoryMessage(pydantic.BaseModel):
     identifier: str
     timestamp: str
     role: str 
-    message: str 
+    message: str
+    model: typing.Optional[str] = None
 
 class ChatHistory(pydantic.BaseModel):
     identifier: str 
@@ -193,3 +194,8 @@ class OIDCAccessToken(pydantic.BaseModel):
     given_name: str | None = None
     family_name: str | None = None
     email: str | None = None
+
+class ChatAgent(pydantic.BaseModel):
+    title: str
+    name: str
+    model: str

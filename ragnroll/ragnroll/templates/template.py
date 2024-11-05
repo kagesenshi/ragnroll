@@ -6,7 +6,7 @@ from .. import styles
 from ..components.sidebar import sidebar
 from ..components.navbar import navbar
 from ..components.authn import login_page
-from ..components.authn import State as AuthState
+from ..components.authn import AuthState
 from typing import Callable
 
 import reflex as rx
