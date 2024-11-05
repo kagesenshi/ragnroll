@@ -45,7 +45,7 @@ async def ollama_chat(chatrequest: ChatRequest):
     return ChatResponse(model=result['model'], message=result['message'])
 
 @app.post('/chat/v1/completions')
-async def chat(chatrequest: ChatRequest) -> ChatResponse:
+async def chat(chatrequest: ChatRequest, identity: Identity) -> ChatResponse:
     if chatrequest.stream:
         return StreamingResponse(ollama_chat_stream(chatrequest))
 
@@ -58,14 +58,15 @@ async def recent_chats(request: fastapi.Request, session: Session, identity: Ide
 
     async def transaction(txn: neo4j.AsyncTransaction):
         query = """
-        MATCH (s:_ChatSession)-[:CONTAINS]->(m:_ChatMessage)
+        MATCH (s:_ChatSession)-[r:CONTAINS]->(m:_ChatMessage)
+        WHERE s.owner = $identity and r.owner = $identity and m.owner = $identity
         WITH s, m ORDER BY m.timestamp ASC
         RETURN s as session, collect(m) as messages 
         ORDER BY session.timestamp DESC
         LIMIT $limit
         """
 
-        chats = await txn.run(query, limit=limit)
+        chats = await txn.run(query, limit=limit, identity=identity.username)
         return (await chats.data(), await chats.consume())
     (query_result, query_summary) = await session.execute_read(transaction)
     result = []
@@ -98,14 +99,15 @@ async def recent_chats(request: fastapi.Request, session: Session, identity: Ide
 
     async def transaction(txn: neo4j.AsyncTransaction):
         query = """
-        MATCH (s:_ChatSession {identifier: $identifier})-[:CONTAINS]->(m:_ChatMessage)
+        MATCH (s:_ChatSession {identifier: $identifier})-[r:CONTAINS]->(m:_ChatMessage)
+        WHERE s.owner = $identity and r.owner = $identity and m.owner = $identity
         WITH s, m ORDER BY m.timestamp ASC
         RETURN s as session, collect(m) as messages 
         ORDER BY session.timestamp DESC
         LIMIT $limit
         """
 
-        chats = await txn.run(query, limit=limit, identifier=identifier)
+        chats = await txn.run(query, limit=limit, identifier=identifier, identity=identity.username)
         return (await chats.single(), await chats.consume())
     (c, query_summary) = await session.execute_read(transaction)
     session = c['session']
@@ -145,11 +147,12 @@ async def put_chat_history(
         await txn.run(
             """
                 MATCH (n:_ChatSession {identifier: $identifier}) 
-                SET n.title=$title, n.timestamp=datetime($timestamp)
+                SET n.title=$title, n.timestamp=datetime($timestamp), n.owner=$identity
                 """,
             identifier=chat.identifier,
             title=chat.title,
-            timestamp=chat.timestamp
+            timestamp=chat.timestamp,
+            identity=identity.username
         )
         prev = None
         for msg in chat.history:
@@ -160,32 +163,35 @@ async def put_chat_history(
             await txn.run(
                 """
                     MATCH (n:_ChatMessage {identifier: $identifier})
-                    SET n.role=$role, n.message=$message, n.timestamp=datetime($timestamp), n.model=$model
+                    SET n.role=$role, n.message=$message, n.timestamp=datetime($timestamp), n.model=$model, n.owner=$identity
                 """,
                 identifier=msg.identifier,
                 role=msg.role,
                 timestamp=msg.timestamp,
                 message=msg.message,
-                model=msg.model
+                model=msg.model,
+                identity=identity.username
             )
             await txn.run(
                 """
                     MATCH (chat:_ChatSession {identifier: $chat_identifier})
                     MATCH (msg:_ChatMessage {identifier: $msg_identifier})
-                    MERGE (chat)-[:CONTAINS]->(msg)
+                    MERGE (chat)-[:CONTAINS {owner: $identity}]->(msg)
                 """,
                 chat_identifier=chat.identifier,
                 msg_identifier=msg.identifier,
+                identity=identity.username
             )
             if prev:
                 await txn.run(
                     """
                         MATCH (curr:_ChatMessage {identifier: $curr_id})
                         MATCH (prev:_ChatMessage {identifier: $prev_id})
-                        MERGE (prev)-[:FOLLOWED_BY]->(curr)
+                        MERGE (prev)-[:FOLLOWED_BY {owner: $identity}]->(curr)
                     """,
                     curr_id=msg.identifier,
                     prev_id=prev.identifier,
+                    identity=identity.username
                 )
             prev = msg
 
@@ -201,13 +207,14 @@ async def delete_chat_history(
     
     async def transaction(txn: neo4j.AsyncTransaction):
         query = """
-        MATCH (n:_ChatSession {identifier: $identifier})
+        MATCH (n:_ChatSession {identifier: $identifier, owner: $identity})
         OPTIONAL MATCH (n)-[:CONTAINS]-(msg:_ChatMessage)
         detach delete n,msg
         """
         await txn.run(
             query,
             identifier=identifier,
+            identity=identity.username
         )
     
     await session.execute_write(transaction)
