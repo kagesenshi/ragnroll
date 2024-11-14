@@ -21,7 +21,7 @@ def menu_item(text: str, url: str) -> rx.Component:
     """
     # Whether the item is active.
     active = (rx.State.router.page.path == url.lower()) | (
-        (rx.State.router.page.path == "/") & text == "Overview"
+        (rx.State.router.page.path == "/") & text == "Search"
     )
 
     return rx.link(
@@ -108,9 +108,11 @@ def menu_button() -> rx.Component:
     # The ordered page routes.
     ordered_page_routes = [
         "/",
+        "/chat",
         "/table",
         "/about",
         "/profile",
+        "/dashboard",
         "/settings",
     ]
 
@@ -125,6 +127,15 @@ def menu_button() -> rx.Component:
             if page["route"] in ordered_page_routes
             else len(ordered_page_routes)
         ),
+    )
+
+    excluded_pages = [
+        '/profile'
+    ]
+
+    ordered_pages = filter(
+        lambda page: page['route'] not in excluded_pages,
+        ordered_pages
     )
 
     return rx.drawer.root(

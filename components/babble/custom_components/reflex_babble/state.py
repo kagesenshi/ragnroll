@@ -112,6 +112,7 @@ class ChatStateMixin(rx.State, mixin=True):
             yield
 
         self.chats = dict([(c.identifier, c) for c in chats])
+        self.last_refresh = now
 
         models = await self.load_models()
         self.available_models = models

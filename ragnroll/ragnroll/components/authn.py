@@ -8,6 +8,7 @@ import reflex as rx
 import jwt
 import traceback
 import sys
+import asyncio
 
 class AuthState(rx.State):
 
@@ -50,28 +51,36 @@ class State(rx.State):
     async def on_failure(self, error: str):
         yield rx.toast.error(error)
 
+    @rx.background
     async def refresh(self):
-        auth: AuthState = await self.get_state(AuthState)
-        if not auth.refresh_token:
-            auth.logged_in = False
-            print('no refresh token')
-            return 
-        try:
-            decoded = decode_token(auth.id_token)
-            auth.logged_in = True
-            print('logged in')
-            return 
-        except jwt.ExpiredSignatureError:
-            print('token expired')
-            pass
-        except jwt.PyJWTError as e:
-            traceback.print_exc(file=sys.stderr)
-            raise e
+        async with self:
+            auth: AuthState = await self.get_state(AuthState)
+            refresh_token = auth.refresh_token
+            if not auth.refresh_token:
+                auth.logged_in = False
+            try:
+                decoded = decode_token(auth.id_token)
+                auth.logged_in = True
+            except jwt.ExpiredSignatureError:
+                print('token expired')
+                auth.logged_in = False
+                pass
+            except jwt.PyJWTError as e:
+                traceback.print_exc(file=sys.stderr)
+                auth.logged_in = False
+                raise e
+            logged_in = auth.logged_in
+
+        if logged_in:
+            if settings.DEBUG:
+                print('next refresh')
+            await asyncio.sleep(60)
+            yield self.__class__.refresh
         
         async with httpx.AsyncClient() as client:
             resp = await client.post(oidc_configuration.token_endpoint, data={
                 'grant_type': 'refresh_token',
-                'refresh_token': auth.refresh_token,
+                'refresh_token': refresh_token,
                 'client_id': settings.OIDC_CLIENT_ID,
                 'client_secret': settings.OIDC_CLIENT_SECRET,
             })
@@ -81,17 +90,21 @@ class State(rx.State):
                 yield rx.toast.error(message)
                 raise Unauthorized(message)
             print('token refreshed')
-            auth.access_token = tokens['access_token']
-            auth.id_token = tokens['id_token']
-            auth.token_type = tokens['token_type']
-            try:
-                decoded = decode_token(auth.id_token)
-            except jwt.PyJWTError as e:
-                self.logged_in = False
-                yield
-                raise e
 
-        auth.logged_in = True
+            async with self:
+                auth: AuthState = await self.get_state(AuthState)
+                auth.access_token = tokens['access_token']
+                auth.id_token = tokens['id_token']
+                auth.token_type = tokens['token_type']
+                try:
+                    decoded = decode_token(auth.id_token)
+                except jwt.PyJWTError as e:
+                    self.logged_in = False
+                    yield
+                    raise e
+                auth.logged_in = True
+
+
 
     async def on_mount(self):
         yield self.__class__.refresh
