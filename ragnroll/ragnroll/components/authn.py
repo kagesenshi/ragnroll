@@ -76,6 +76,7 @@ class State(rx.State):
                 print('next refresh')
             await asyncio.sleep(60)
             yield self.__class__.refresh
+            return
         
         async with httpx.AsyncClient() as client:
             resp = await client.post(oidc_configuration.token_endpoint, data={
